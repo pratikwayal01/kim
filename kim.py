@@ -74,6 +74,12 @@ DEFAULT_CONFIG = {
         },
     ],
     "sound": True,
+    "slack": {
+        "enabled": False,
+        "webhook_url": "",
+        "bot_token": "",
+        "channel": "#general",
+    },
 }
 
 
@@ -146,7 +152,13 @@ $n = [Windows.UI.Notifications.ToastNotification]::new($xml)
         log.error(f"powershell toast: {e}")
 
 
-def notify(title: str, message: str, urgency: str = "normal", sound: bool = True):
+def notify(
+    title: str,
+    message: str,
+    urgency: str = "normal",
+    sound: bool = True,
+    slack_config: dict = None,
+):
     system = platform.system()
     log.info(f"notify [{urgency}] → {title}")
     if system == "Linux":
@@ -158,21 +170,115 @@ def notify(title: str, message: str, urgency: str = "normal", sound: bool = True
     else:
         log.warning(f"Unsupported platform: {system}")
 
+    if slack_config and slack_config.get("enabled"):
+        if slack_config.get("webhook_url"):
+            _notify_slack_webhook(title, message, slack_config["webhook_url"])
+        elif slack_config.get("bot_token") and slack_config.get("channel"):
+            _notify_slack_bot(
+                title, message, slack_config["bot_token"], slack_config["channel"]
+            )
+
+
+def _notify_slack_webhook(title: str, message: str, webhook_url: str):
+    try:
+        import urllib.request
+        import urllib.error
+
+        payload = {
+            "text": f"*{title}*\n{message}",
+            "username": "kim reminder",
+            "icon_emoji": ":bell:",
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url, data=data, headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=10)
+        log.info(f"Slack webhook notification sent: {title}")
+    except ImportError:
+        log.error("urllib not available for Slack webhook")
+    except urllib.error.URLError as e:
+        log.error(f"Slack webhook error: {e}")
+    except Exception as e:
+        log.error(f"Slack webhook failed: {e}")
+
+
+def _notify_slack_bot(title: str, message: str, bot_token: str, channel: str):
+    try:
+        import urllib.request
+        import urllib.error
+
+        urgency_emoji = {
+            "low": ":information_source:",
+            "normal": ":bell:",
+            "critical": ":rotating_light:",
+        }
+        emoji = urgency_emoji.get("normal", ":bell:")
+
+        payload = {
+            "channel": channel,
+            "text": f"{emoji} *{title}*\n{message}",
+            "username": "kim reminder",
+            "icon_emoji": ":bell:",
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            "https://slack.com/api/chat.postMessage",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {bot_token}",
+            },
+        )
+        urllib.request.urlopen(req, timeout=10)
+        log.info(f"Slack bot notification sent: {title}")
+    except ImportError:
+        log.error("urllib not available for Slack bot")
+    except urllib.error.URLError as e:
+        log.error(f"Slack bot error: {e}")
+    except Exception as e:
+        log.error(f"Slack bot failed: {e}")
+
 
 # ── Reminder thread ───────────────────────────────────────────────────────────
 
 
-def run_reminder(r: dict, sound: bool, stop_event: threading.Event):
+def parse_interval(value):
+    if isinstance(value, int):
+        return value * 60
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value.endswith("d"):
+            return int(value[:-1]) * 24 * 60 * 60
+        elif value.endswith("h"):
+            return int(value[:-1]) * 60 * 60
+        elif value.endswith("m"):
+            return int(value[:-1]) * 60
+        elif value.endswith("s"):
+            return int(value[:-1])
+        try:
+            return int(value) * 60
+        except ValueError:
+            pass
+    return 30 * 60
+
+
+def run_reminder(
+    r: dict, sound: bool, stop_event: threading.Event, slack_config: dict = None
+):
     name = r.get("name", "unnamed")
-    interval = r["interval_minutes"] * 60
+    interval_seconds = parse_interval(r.get("interval_minutes", 30))
     title = r.get("title", "Reminder")
     message = r.get("message", "Hey!")
     urgency = r.get("urgency", "normal")
 
-    log.info(f"[{name}] started — every {r['interval_minutes']} min")
+    interval_display = r.get("interval_minutes", 30)
+    log.info(f"[{name}] started — every {interval_display}")
 
-    while not stop_event.wait(interval):
-        notify(title, message, urgency, sound)
+    while not stop_event.wait(interval_seconds):
+        notify(title, message, urgency, sound, slack_config)
         log.info(f"[{name}] fired")
 
 
@@ -195,6 +301,7 @@ def cmd_start(args):
 
     config = load_config()
     sound = config.get("sound", True)
+    slack_config = config.get("slack", {})
     active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
 
     if not active:
@@ -206,7 +313,9 @@ def cmd_start(args):
 
     print(f"kim v{VERSION} — {len(active)} reminder(s) active")
     for r in active:
-        print(f"  • {r['name']:<20} every {r['interval_minutes']} min")
+        interval = r.get("interval_minutes", 30)
+        interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
+        print(f"  • {r['name']:<20} every {interval_str}")
     print(f"Log: {LOG_FILE}")
 
     log.info(f"kim v{VERSION} started — PID {os.getpid()}")
@@ -227,13 +336,19 @@ def cmd_start(args):
         f"{len(active)} reminder(s): " + ", ".join(r["name"] for r in active),
         urgency="low",
         sound=False,
+        slack_config=slack_config if slack_config.get("enabled") else None,
     )
 
     threads = []
     for r in active:
         t = threading.Thread(
             target=run_reminder,
-            args=(r, sound, stop_event),
+            args=(
+                r,
+                sound,
+                stop_event,
+                slack_config if slack_config.get("enabled") else None,
+            ),
             name=r["name"],
             daemon=True,
         )
@@ -293,12 +408,17 @@ def cmd_status(args):
 def cmd_list(args):
     config = load_config()
     reminders = config.get("reminders", [])
-    print(f"{'NAME':<20} {'INTERVAL':>10}   {'URGENCY':<10} {'ENABLED'}")
-    print("─" * 55)
+    print(f"{'NAME':<20} {'INTERVAL':>12}   {'URGENCY':<10} {'ENABLED'}")
+    print("─" * 58)
     for r in reminders:
         enabled = "✓" if r.get("enabled", True) else "·"
+        interval = r.get("interval_minutes", 30)
+        if isinstance(interval, str):
+            interval_str = interval
+        else:
+            interval_str = f"{interval} min"
         print(
-            f"{r['name']:<20} {str(r['interval_minutes']) + ' min':>10}   {r.get('urgency', 'normal'):<10} {enabled}"
+            f"{r['name']:<20} {interval_str:>12}   {r.get('urgency', 'normal'):<10} {enabled}"
         )
 
 
@@ -321,6 +441,7 @@ def cmd_edit(args):
 def cmd_add(args):
     config = load_config()
     name = args.name
+    interval_str = args.interval
 
     for r in config.get("reminders", []):
         if r.get("name") == name:
@@ -329,7 +450,7 @@ def cmd_add(args):
 
     new_reminder = {
         "name": name,
-        "interval_minutes": args.interval,
+        "interval_minutes": interval_str,
         "title": args.title or f"Reminder: {name}",
         "message": args.message or "Time for a reminder!",
         "urgency": args.urgency,
@@ -341,7 +462,7 @@ def cmd_add(args):
     with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
-    print(f"✓ Added reminder '{name}' (every {args.interval} min)")
+    print(f"✓ Added reminder '{name}' (every {interval_str})")
     log.info(f"Added reminder: {name}")
 
 
@@ -445,7 +566,13 @@ def get_key():
     if tty is None or termios is None:
         return input("Enter choice: ")
 
-    fd = sys.stdin.fileno()
+    try:
+        fd = sys.stdin.fileno()
+        if not os.isatty(fd):
+            return input("Enter choice: ")
+    except:
+        return input("Enter choice: ")
+
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
@@ -690,50 +817,55 @@ def cmd_interactive(args):
     selected = 0
     options_count = 8
 
-    while True:
-        print_header()
+    try:
+        while True:
+            print_header()
 
-        reminders = config.get("reminders", [])
-        active = len([r for r in reminders if r.get("enabled", True)])
-        print(f"  Active reminders: {active}/{len(reminders)}")
-        if PID_FILE.exists():
-            print("  Status: \033[1;32m● Running\033[0m")
-        else:
-            print("  Status: \033[0;90m○ Stopped\033[0m")
-        print()
+            reminders = config.get("reminders", [])
+            active = len([r for r in reminders if r.get("enabled", True)])
+            print(f"  Active reminders: {active}/{len(reminders)}")
+            if PID_FILE.exists():
+                print("  Status: \033[1;32m● Running\033[0m")
+            else:
+                print("  Status: \033[0;90m○ Stopped\033[0m")
+            print()
 
-        print_menu(selected)
+            print_menu(selected)
 
-        key = get_key()
+            key = get_key()
 
-        if key == "\x1b":
-            if tty and termios:
-                extra = sys.stdin.read(1)
-                if extra == "[":
-                    direction = sys.stdin.read(1)
-                    if direction == "A":
-                        selected = (selected - 1) % options_count
-                    elif direction == "B":
-                        selected = (selected + 1) % options_count
-        elif key == "\n":
-            if selected == 0:
-                list_reminders()
-            elif selected == 1:
-                add_reminder()
-            elif selected == 2:
-                edit_reminder()
-            elif selected == 3:
-                toggle_reminder()
-            elif selected == 4:
-                remove_reminder()
-            elif selected == 5:
-                start_kim()
-            elif selected == 6:
-                stop_kim()
-            elif selected == 7:
+            if key == "\x1b":
+                if tty and termios:
+                    extra = sys.stdin.read(1)
+                    if extra == "[":
+                        direction = sys.stdin.read(1)
+                        if direction == "A":
+                            selected = (selected - 1) % options_count
+                        elif direction == "B":
+                            selected = (selected + 1) % options_count
+            elif key == "\n":
+                if selected == 0:
+                    list_reminders()
+                elif selected == 1:
+                    add_reminder()
+                elif selected == 2:
+                    edit_reminder()
+                elif selected == 3:
+                    toggle_reminder()
+                elif selected == 4:
+                    remove_reminder()
+                elif selected == 5:
+                    start_kim()
+                elif selected == 6:
+                    stop_kim()
+                elif selected == 7:
+                    break
+            elif key in ["q", "\x03"]:
                 break
-        elif key in ["q", "\x03"]:
-            break
+    except KeyboardInterrupt:
+        print("\n\033[33mExiting interactive mode...\033[0m")
+    finally:
+        print("\033[2J\033[H", end="")
 
 
 def cmd_selfupdate(args):
@@ -997,7 +1129,10 @@ def cmd_validate(args):
             if "interval_minutes" not in r:
                 print(f"Error: Reminder '{r.get('name')}' missing 'interval_minutes'.")
                 sys.exit(1)
-            if not isinstance(r["interval_minutes"], int) or r["interval_minutes"] < 1:
+            interval_val = r["interval_minutes"]
+            if isinstance(interval_val, str):
+                pass
+            elif not isinstance(interval_val, int) or interval_val < 1:
                 print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
                 sys.exit(1)
 
@@ -1008,6 +1143,42 @@ def cmd_validate(args):
         sys.exit(1)
 
 
+def cmd_slack(args):
+    config = load_config()
+    slack_config = config.get("slack", {})
+
+    if args.test:
+        title = args.title or "Test Notification"
+        message = args.message or "This is a test from kim!"
+
+        if slack_config.get("webhook_url"):
+            print(f"Sending test to webhook...")
+            _notify_slack_webhook(title, message, slack_config["webhook_url"])
+            print("✓ Test notification sent via webhook")
+        elif slack_config.get("bot_token") and slack_config.get("channel"):
+            print(f"Sending test to #{slack_config.get('channel')}...")
+            _notify_slack_bot(
+                title, message, slack_config["bot_token"], slack_config["channel"]
+            )
+            print("✓ Test notification sent via bot")
+        else:
+            print(
+                "Slack not configured. Edit ~/.kim/config.json and add slack.webhook_url or slack.bot_token"
+            )
+            sys.exit(1)
+        return
+
+    print("Slack configuration:")
+    print(f"  Enabled: {slack_config.get('enabled', False)}")
+    print(
+        f"  Webhook URL: {'configured' if slack_config.get('webhook_url') else 'not set'}"
+    )
+    print(
+        f"  Bot Token: {'configured' if slack_config.get('bot_token') else 'not set'}"
+    )
+    print(f"  Channel: {slack_config.get('channel', '#general')}")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 BASH_COMPLETION = """#!/bin/bash
@@ -1016,7 +1187,7 @@ _kim_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate completion"
+    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack completion"
 
     case "${prev}" in
         kim)
@@ -1059,6 +1230,7 @@ _kim() {
         "export:Export reminders to file"
         "import:Import reminders from file"
         "validate:Validate config file"
+        "slack:Slack notification settings"
         "completion:Generate shell completions"
     )
 
@@ -1073,9 +1245,7 @@ _kim "$@"
 FISH_COMPLETION = """#!/usr/bin/env fish
 # kim fish completion
 
-complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate completion"
-
-complete -c kim -n "__fish_seen_subcommand_from remove enable disable update" -a "(python3 -c "import json; print(' '.join([r['name'] for r in json.load(open('$HOME/.kim/config.json')).get('reminders', [])]))" 2>/dev/null)"
+complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack completion"
 """
 
 
@@ -1142,7 +1312,11 @@ logs:   ~/.kim/kim.log
     add_p = sub.add_parser("add", help="Add a new reminder")
     add_p.add_argument("name", help="Reminder name")
     add_p.add_argument(
-        "-i", "--interval", type=int, required=True, help="Interval in minutes"
+        "-I",
+        "--interval",
+        type=str,
+        required=True,
+        help="Interval (e.g., 30m, 1h, 1d, or just number for minutes)",
     )
     add_p.add_argument("-t", "--title", help="Notification title")
     add_p.add_argument("-m", "--message", help="Notification message")
@@ -1216,6 +1390,11 @@ logs:   ~/.kim/kim.log
 
     sub.add_parser("validate", help="Validate config file")
 
+    slack_p = sub.add_parser("slack", help="Slack notification settings")
+    slack_p.add_argument("--test", action="store_true", help="Send test notification")
+    slack_p.add_argument("-t", "--title", help="Test notification title")
+    slack_p.add_argument("-m", "--message", help="Test notification message")
+
     comp_p = sub.add_parser("completion", help="Generate shell completions")
     comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
 
@@ -1248,6 +1427,7 @@ logs:   ~/.kim/kim.log
         "export": cmd_export,
         "import": cmd_import,
         "validate": cmd_validate,
+        "slack": cmd_slack,
         "completion": cmd_completion,
     }
 

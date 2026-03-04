@@ -35,12 +35,14 @@ kim remove         Remove a reminder
 kim enable         Enable a reminder
 kim disable        Disable a reminder
 kim update         Update a reminder
-kim interactive    Enter interactive mode
+kim interactive    Enter interactive mode (-i)
 kim self-update    Check for and install updates
 kim uninstall      Uninstall kim completely
 kim export         Export reminders to file
 kim import         Import reminders from file
 kim validate       Validate config file
+kim slack          Slack notification settings
+kim completion     Generate shell completions
 ```
 
 ---
@@ -76,12 +78,37 @@ This is the only file you need to touch.
 | Field              | Values                           | Description                      |
 |--------------------|----------------------------------|----------------------------------|
 | `name`             | string                           | Unique identifier                |
-| `interval_minutes` | number                           | How often to fire                |
+| `interval_minutes` | number or string (e.g. "30m", "1h", "1d") | How often to fire |
 | `title`            | string                           | Notification heading             |
 | `message`          | string                           | Notification body                |
-| `urgency`          | `low` / `normal` / `critical`    | Controls notification priority   |
-| `enabled`          | `true` / `false`                 | Toggle without deleting          |
-| `sound`            | `true` / `false`                 | (top-level) Play sound globally  |
+| `urgency`          | `low` / `normal` / `critical`   | Controls notification priority   |
+| `enabled`          | `true` / `false`                | Toggle without deleting          |
+| `sound`            | `true` / `false`                 | (top-level) Play sound globally |
+| `slack`            | object                           | (top-level) Slack notification settings |
+
+### Slack Integration
+
+```json
+{
+  "reminders": [...],
+  "sound": true,
+  "slack": {
+    "enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/...",
+    "bot_token": "xoxb-...",
+    "channel": "#general"
+  }
+}
+```
+
+**Choose one method:**
+- **Webhook**: Create an incoming webhook at `https://api.slack.com/messaging/webhooks`
+- **Bot Token**: Create a Slack app with `chat:write` scope and install to your workspace
+
+Test your setup:
+```bash
+kim slack --test
+```
 
 After editing, apply changes:
 ```bash
@@ -144,7 +171,7 @@ Remove-Item -Recurse "$env:USERPROFILE\.kim"
 - [x] Self-update (`kim self-update`)
 - [x] Uninstall command (`kim uninstall`)
 - [x] Config validation (`kim validate`)
-- Slack / webhook notifications as a channel
+- [x] Slack / webhook notifications
 - One-shot reminders (`kim remind "standup" in 10m`)
 - Per-reminder schedule (cron-style, not just interval)
 - Plugin system for custom notification channels
