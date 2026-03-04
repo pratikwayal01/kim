@@ -1010,6 +1010,83 @@ def cmd_validate(args):
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+BASH_COMPLETION = """#!/bin/bash
+_kim_completions() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate completion"
+
+    case "${prev}" in
+        kim)
+            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+            return 0
+            ;;
+        remove|enable|disable|update)
+            local config="$HOME/.kim/config.json"
+            if [[ -f "$config" ]]; then
+                local names=$(python3 -c "import json; print(' '.join([r['name'] for r in json.load(open('$config')).get('reminders', [])]))" 2>/dev/null)
+                COMPREPLY=( $(compgen -W "${names}" -- ${cur}) )
+            fi
+            return 0
+            ;;
+    esac
+}
+complete -F _kim_completions kim
+"""
+
+ZSH_COMPLETION = """#!/usr/bin/env zsh
+# kim zsh completion
+
+_kim() {
+    local -a commands
+    commands=(
+        "start:Start the daemon"
+        "stop:Stop the daemon"
+        "status:Show status and active reminders"
+        "list:List all reminders from config"
+        "logs:Show recent log entries"
+        r"edit:Open config in $EDITOR"
+        "add:Add a new reminder"
+        "remove:Remove a reminder"
+        "enable:Enable a reminder"
+        "disable:Disable a reminder"
+        "update:Update a reminder"
+        "interactive:Enter interactive mode"
+        "self-update:Check for and install updates"
+        "uninstall:Uninstall kim completely"
+        "export:Export reminders to file"
+        "import:Import reminders from file"
+        "validate:Validate config file"
+        "completion:Generate shell completions"
+    )
+
+    if (( CURRENT == 2 )); then
+        _describe 'command' commands
+    fi
+}
+
+_kim "$@"
+"""
+
+FISH_COMPLETION = """#!/usr/bin/env fish
+# kim fish completion
+
+complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate completion"
+
+complete -c kim -n "__fish_seen_subcommand_from remove enable disable update" -a "(python3 -c "import json; print(' '.join([r['name'] for r in json.load(open('$HOME/.kim/config.json')).get('reminders', [])]))" 2>/dev/null)"
+"""
+
+
+def cmd_completion(args):
+    if args.shell == "bash":
+        print(BASH_COMPLETION)
+    elif args.shell == "zsh":
+        print(ZSH_COMPLETION)
+    elif args.shell == "fish":
+        print(FISH_COMPLETION)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1029,12 +1106,16 @@ commands:
   enable      Enable a reminder
   disable     Disable a reminder
   update      Update a reminder
-  interactive Enter interactive mode
+  interactive Enter interactive mode (alias: -i)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
   export      Export reminders to file
   import      Import reminders from file
   validate    Validate config file
+  completion  Generate shell completions
+
+Short flags:
+  -i          Enter interactive mode
 
 config: ~/.kim/config.json
 logs:   ~/.kim/kim.log
@@ -1096,10 +1177,11 @@ logs:   ~/.kim/kim.log
     update_p.add_argument("--enable", action="store_true", help="Enable the reminder")
     update_p.add_argument("--disable", action="store_true", help="Disable the reminder")
 
-    sub.add_parser("interactive", help="Enter interactive mode")
+    sub.add_parser("interactive", help="Enter interactive mode").add_argument(
+        "-i", action="store_true", dest="interactive_alias"
+    )
 
-    update_p = sub.add_parser("self-update", help="Check for and install updates")
-    update_p.add_argument(
+    sub.add_parser("self-update", help="Check for and install updates").add_argument(
         "-f", "--force", action="store_true", help="Skip confirmation prompt"
     )
 
@@ -1134,6 +1216,18 @@ logs:   ~/.kim/kim.log
 
     sub.add_parser("validate", help="Validate config file")
 
+    comp_p = sub.add_parser("completion", help="Generate shell completions")
+    comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
+
+    if "-i" in sys.argv:
+        new_argv = []
+        for a in sys.argv:
+            if a == "-i":
+                new_argv.append("interactive")
+            else:
+                new_argv.append(a)
+        sys.argv = new_argv
+
     args = parser.parse_args()
 
     cmds = {
@@ -1154,6 +1248,7 @@ logs:   ~/.kim/kim.log
         "export": cmd_export,
         "import": cmd_import,
         "validate": cmd_validate,
+        "completion": cmd_completion,
     }
 
     if args.command in cmds:
