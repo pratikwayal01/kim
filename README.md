@@ -24,12 +24,23 @@ That's it. kim starts automatically on login.
 ## Usage
 
 ```
-kim start       Start the daemon
-kim stop        Stop the daemon
-kim status      Show running reminders
-kim list        List all reminders from config
-kim logs        Tail the log file
-kim edit        Open config in $EDITOR
+kim start          Start the daemon
+kim stop           Stop the daemon
+kim status         Show running reminders
+kim list           List all reminders from config
+kim logs           Tail the log file
+kim edit           Open config in $EDITOR
+kim add            Add a new reminder
+kim remove         Remove a reminder
+kim enable         Enable a reminder
+kim disable        Disable a reminder
+kim update         Update a reminder
+kim interactive    Enter interactive mode
+kim self-update    Check for and install updates
+kim uninstall      Uninstall kim completely
+kim export         Export reminders to file
+kim import         Import reminders from file
+kim validate       Validate config file
 ```
 
 ---
@@ -96,6 +107,13 @@ kim stop && kim start
 
 ## Uninstall
 
+**Quick uninstall (use the built-in command)**
+```bash
+kim uninstall
+```
+
+**Manual uninstall**
+
 **Linux**
 ```bash
 systemctl --user disable --now kim.service
@@ -120,7 +138,12 @@ Remove-Item -Recurse "$env:USERPROFILE\.kim"
 
 ## Roadmap ideas
 
-- `kim add` / `kim remove` — manage reminders from CLI without editing JSON
+- [x] `kim add` / `kim remove` — manage reminders from CLI without editing JSON
+- [x] Interactive mode (`kim interactive`)
+- [x] Export/import functionality
+- [x] Self-update (`kim self-update`)
+- [x] Uninstall command (`kim uninstall`)
+- [x] Config validation (`kim validate`)
 - Slack / webhook notifications as a channel
 - One-shot reminders (`kim remind "standup" in 10m`)
 - Per-reminder schedule (cron-style, not just interval)
