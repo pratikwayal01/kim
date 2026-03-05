@@ -9,7 +9,7 @@ on:
         default: "v1.0.0"
 
 permissions:
-  contents: write  
+  contents: write
 
 jobs:
   build:
@@ -17,11 +17,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: kim-linux
-          - os: macos-latest
-            artifact: kim-macos
+            artifact: kim-linux-x86_64
+          - os: ubuntu-24.04-arm
+            artifact: kim-linux-arm64
+          - os: macos-13        # Intel
+            artifact: kim-macos-x86_64
+          - os: macos-latest    # Apple Silicon
+            artifact: kim-macos-arm64
           - os: windows-latest
-            artifact: kim-windows.exe
+            artifact: kim-windows-x86_64.exe
 
     runs-on: ${{ matrix.os }}
 
