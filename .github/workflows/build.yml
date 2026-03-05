@@ -1,15 +1,24 @@
-name: Build Binaries
+name: Build & Attach Binaries
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach binaries to (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
 
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact: kim-linux
+          - os: macos-latest
+            artifact: kim-macos
+          - os: windows-latest
+            artifact: kim-windows.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -24,10 +33,9 @@ jobs:
         run: pip install pyinstaller
 
       - name: Build binary
-        run: pyinstaller --onefile --name kim kim.py
+        run: pyinstaller --onefile --name ${{ matrix.artifact }} kim.py
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kim-${{ matrix.os }}
-          path: dist/
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ inputs.tag }} dist/${{ matrix.artifact }} --clobber
