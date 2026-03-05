@@ -570,7 +570,7 @@ def cmd_remind(args):
     import re
     for match in re.finditer(r"(\d+)\s*(d|h|m|s)", raw):
         value, unit = int(match.group(1)), match.group(2)
-        total_seconds += {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit]  * value
+        total_seconds += {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit] * value
 
     if total_seconds == 0:
         print("Couldn't parse time. Examples: 'in 10m', 'in 1h', 'in 2h 30m'")
@@ -578,6 +578,7 @@ def cmd_remind(args):
 
     message = args.message
     title = args.title or "⏰ Reminder"
+    sleep_seconds = total_seconds  # save before display loop mutates it
 
     # Human-readable display
     parts = []
@@ -595,18 +596,15 @@ def cmd_remind(args):
         pid = os.fork()
         if pid > 0:
             return  # parent exits, child continues
+        time.sleep(sleep_seconds)
+        # child continues here to fire the notification...
     else:
         # Windows: re-launch as detached subprocess and exit
         subprocess.Popen(
             [sys.argv[0], "_remind-fire",
              "--message", message,
              "--title", title,
-             "--seconds", str(total_seconds + sum(
-                 v * u for v, u in zip(
-                     [int(p[:-1]) for p in parts],
-                     [3600 if 'h' in p else 60 if 'm' in p else 1 for p in parts]
-                 )
-             ))],
+             "--seconds", str(sleep_seconds)],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
             close_fds=True,
         )
