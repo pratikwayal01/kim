@@ -642,7 +642,7 @@ def cmd_remind_fire(args):
         slack_config=slack_config if slack_config.get("enabled") else None,
     )
     log.info(f"One-shot reminder fired: '{args.message}'")
-    
+
 def get_key():
     if tty is None or termios is None:
         return input("Enter choice: ")
@@ -954,9 +954,6 @@ def cmd_selfupdate(args):
     print("Checking for updates...")
 
     try:
-        import urllib.request
-        import urllib.error
-
         url = "https://api.github.com/repos/pratikwayal01/kim/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "kim"})
 
@@ -1014,31 +1011,33 @@ def cmd_selfupdate(args):
                 print("Please update manually from GitHub releases.")
                 return
 
-            kim_path = Path(__file__).resolve()
-            backup_path = kim_path.with_suffix(".bak")
+            # ── Resolve install path ──────────────────────────────────────────
+            # Use the `kim` binary found in PATH (e.g. ~/.local/bin/kim).
+            # Never overwrite __file__, which is the Python source being executed.
+            kim_in_path = shutil.which("kim")
+            if kim_in_path:
+                kim_path = Path(kim_in_path).resolve()
+            else:
+                kim_path = Path.home() / ".local" / "bin" / "kim"
+                kim_path.parent.mkdir(parents=True, exist_ok=True)
+
+            tmp_path = kim_path.with_suffix(".new")
 
             print(f"Downloading {asset_url}...")
-            urllib.request.urlretrieve(asset_url, backup_path)
+            urllib.request.urlretrieve(asset_url, tmp_path)
 
-            os.chmod(backup_path, 0o755)
-
-            old_path = kim_path
-            new_path = backup_path
-
-            new_path.replace(old_path)
+            os.chmod(tmp_path, 0o755)
+            tmp_path.replace(kim_path)
 
             print(f"\n✓ Updated to version {latest_version}")
             print("Run 'kim --version' to verify.")
 
-    except ImportError:
-        print("urllib not available. Please update manually.")
     except urllib.error.URLError as e:
         print(f"Network error: {e}")
     except Exception as e:
         print(f"Update failed: {e}")
         if args.force:
             raise
-
 
 def cmd_uninstall(args):
     print("\033[1;31m=== Uninstall kim ===\033[0m\n")
