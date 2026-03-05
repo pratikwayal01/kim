@@ -124,7 +124,7 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 | Windows | Task Scheduler | PowerShell toast |
 
 - **Pure Python stdlib** — no pip installs
-- Each reminder runs in its own thread
+- All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
 - Config changes are detected automatically — no need to restart manually
 - Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
 
