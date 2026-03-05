@@ -20,9 +20,7 @@ jobs:
             artifact: kim-linux-x86_64
           - os: ubuntu-24.04-arm
             artifact: kim-linux-arm64
-          - os: macos-13        # Intel
-            artifact: kim-macos-x86_64
-          - os: macos-latest    # Apple Silicon
+          - os: macos-latest
             artifact: kim-macos-arm64
           - os: windows-latest
             artifact: kim-windows-x86_64.exe
