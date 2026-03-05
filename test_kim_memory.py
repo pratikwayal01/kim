@@ -3,7 +3,7 @@ test_kim_memory.py — Memory scale tests for KIM reminder daemon
 ================================================================
 Tests memory usage across:
   1. Config parsing at scale (10 → 10,000 reminders)
-  2. Thread-per-reminder overhead
+  2. OLD vs NEW scheduler head-to-head (thread-per-reminder vs heapq)
   3. Memory leak detection over repeated cycles
   4. Peak vs steady-state memory
   5. Large config field payloads
@@ -14,8 +14,7 @@ Run:
 Requirements:
     pip install psutil   (optional but preferred — falls back to tracemalloc only)
 
-The tests intentionally replicate KIM's internal patterns without needing
-KIM installed — so they work on any machine.
+Place kim.py in the same directory for the KimScheduler comparison test.
 """
 
 import gc
@@ -28,6 +27,21 @@ import time
 import tracemalloc
 from dataclasses import dataclass, field
 from typing import List, Optional
+
+# ── optional KimScheduler (from patched kim.py) ───────────────────────────────
+try:
+    import importlib.util, sys as _sys
+    _spec = importlib.util.spec_from_file_location(
+        "kim", os.path.join(os.path.dirname(__file__), "kim.py")
+    )
+    _kim = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_kim)
+    KimScheduler = _kim.KimScheduler
+    _HAS_KIM = True
+except Exception as _e:
+    _HAS_KIM = False
+    KimScheduler = None
+    print(f"[warn] kim.py not found — scheduler comparison test will be skipped ({_e})\n")
 
 # ── optional psutil ────────────────────────────────────────────────────────────
 try:
@@ -215,16 +229,19 @@ def test_config_json_io():
         os.unlink(p)
 
 
-# ── Test 3: Thread-per-reminder overhead ──────────────────────────────────────
+# ── Test 3: OLD vs NEW scheduler head-to-head ─────────────────────────────────
 
 def test_thread_overhead():
     """
-    Measures how much memory KIM-style daemon threads consume.
-    Spawns N threads (all sleeping) and measures RSS growth.
+    Head-to-head memory comparison:
+      OLD — one thread per reminder (ReminderThread)
+      NEW — single heapq scheduler thread (KimScheduler)
     """
-    print("\n[TEST 3] Thread-per-reminder memory overhead")
+    print("\n[TEST 3] OLD (threads) vs NEW (heapq scheduler) — head-to-head")
     thread_counts = [10, 50, 100, 200, 500]
 
+    # ── OLD: thread-per-reminder ───────────────────────────────────────────
+    print("\n  ▶ OLD: thread-per-reminder")
     for n in thread_counts:
         reminders = [make_reminder(i) for i in range(n)]
         threads = []
@@ -245,26 +262,92 @@ def test_thread_overhead():
         rss_after = rss_mb()
 
         sample = MemSample(
-            label=f"spawn {n} daemon threads",
+            label=f"[OLD] {n} threads",
             rss_before=rss_before,
             rss_after=rss_after,
             tracemalloc_peak_kb=peak / 1024,
             tracemalloc_current_kb=current / 1024,
             duration_s=duration,
         )
-        rss_per_thread = (sample.rss_delta / n) if sample.rss_delta else None
-        sample.extras["n_threads"] = n
-        sample.extras["rss_per_thread"] = fmt_mb(rss_per_thread)
+        rss_per = (sample.rss_delta / n) if sample.rss_delta else None
+        sample.extras["n_reminders"] = n
+        sample.extras["rss_per_reminder"] = fmt_mb(rss_per)
         results.append(sample)
         print(sample.report())
 
-        # Clean up
         for t in threads:
             t.stop()
         for t in threads:
             t.join(timeout=1)
         del threads
         gc.collect()
+
+    # ── NEW: heapq KimScheduler ────────────────────────────────────────────
+    print("\n  ▶ NEW: heapq KimScheduler")
+    if not _HAS_KIM:
+        print("  (skipped — kim.py not found)")
+        return
+
+    def _noop_notifier(reminder):
+        pass  # don't actually send notifications during test
+
+    for n in thread_counts:
+        config = build_config(n)
+
+        gc.collect()
+        rss_before = rss_mb()
+        tracemalloc.start()
+        t0 = time.perf_counter()
+
+        scheduler = KimScheduler(config, _noop_notifier)
+        scheduler.start()
+
+        duration = time.perf_counter() - t0
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        rss_after = rss_mb()
+
+        sample = MemSample(
+            label=f"[NEW] {n} reminders (heapq)",
+            rss_before=rss_before,
+            rss_after=rss_after,
+            tracemalloc_peak_kb=peak / 1024,
+            tracemalloc_current_kb=current / 1024,
+            duration_s=duration,
+        )
+        rss_per = (sample.rss_delta / n) if sample.rss_delta else None
+        sample.extras["n_reminders"] = n
+        sample.extras["rss_per_reminder"] = fmt_mb(rss_per)
+        results.append(sample)
+        print(sample.report())
+
+        scheduler.stop()
+        del scheduler
+        gc.collect()
+
+    # ── Print comparison table ─────────────────────────────────────────────
+    print("\n  ┌─────────────────────────────────────────────────────────┐")
+    print("  │  HEAD-TO-HEAD SUMMARY (RSS delta)                       │")
+    print("  ├──────────┬──────────────┬──────────────┬────────────────┤")
+    print("  │ Reminders│ OLD (threads)│ NEW (heapq)  │ Savings        │")
+    print("  ├──────────┼──────────────┼──────────────┼────────────────┤")
+
+    old_results = {s.extras["n_reminders"]: s for s in results if s.label.startswith("[OLD]")}
+    new_results = {s.extras["n_reminders"]: s for s in results if s.label.startswith("[NEW]")}
+
+    for n in thread_counts:
+        old = old_results.get(n)
+        new = new_results.get(n)
+        old_str = fmt_mb(old.rss_delta) if old else "N/A"
+        new_str = fmt_mb(new.rss_delta) if new else "N/A"
+        if old and new and old.rss_delta and new.rss_delta and old.rss_delta > 0:
+            savings = (1 - new.rss_delta / old.rss_delta) * 100
+            sav_str = f"{savings:.0f}% less"
+        else:
+            sav_str = "N/A"
+        print(f"  │ {n:<8} │ {old_str:>12} │ {new_str:>12} │ {sav_str:<14} │")
+
+    print("  └──────────┴──────────────┴──────────────┴────────────────┘")
 
 
 # ── Test 4: Memory leak detection — repeated parse cycles ─────────────────────
