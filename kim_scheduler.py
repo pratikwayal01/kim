@@ -1,38 +1,6 @@
 """
-kim_scheduler.py — Drop-in heapq scheduler for KIM
-====================================================
-Replaces KIM's one-thread-per-reminder architecture with a single
-scheduler thread backed by a min-heap. All behaviour is identical from
-the outside; only the internal scheduling engine changes.
-
-Memory comparison (from scale tests):
-  Old (thread-per-reminder):  500 reminders → ~540 MB  (Python 3.12)
-  New (heapq scheduler):      500 reminders → ~3-5 MB   (any Python)
-
-Usage
------
-Import and swap in place of KIM's ReminderDaemon / thread-spawning code:
-
-    from kim_scheduler import KimScheduler
-
-    scheduler = KimScheduler(config, notifier_fn)
-    scheduler.start()
-    ...
-    scheduler.stop()
-
-The notifier_fn matches KIM's existing notification interface:
-
-    def notifier_fn(reminder: dict) -> None:
-        # send desktop notification, Slack message, etc.
-        ...
-
-Config format is identical to ~/.kim/config.json — no changes needed.
-
-Thread safety
--------------
-add_reminder / remove_reminder / update_reminder are all thread-safe and
-can be called from CLI commands (kim add / kim remove / kim update) while
-the daemon is running.
+kim_scheduler.py 
+================================================================================
 """
 
 import heapq
