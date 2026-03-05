@@ -561,7 +561,88 @@ def cmd_update(args):
     print(f"✓ Updated reminder '{name}'")
     log.info(f"Updated reminder: {name}")
 
+def cmd_remind(args):
+    # Parse "kim remind "message" in 10m"
+    raw = " ".join(args.time)  # e.g. "in 10m" or "10m" or "1h 30m"
+    raw = raw.strip().lower().removeprefix("in").strip()
 
+    total_seconds = 0
+    import re
+    for match in re.finditer(r"(\d+)\s*(d|h|m|s)", raw):
+        value, unit = int(match.group(1)), match.group(2)
+        total_seconds += {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit]  * value
+
+    if total_seconds == 0:
+        print("Couldn't parse time. Examples: 'in 10m', 'in 1h', 'in 2h 30m'")
+        sys.exit(1)
+
+    message = args.message
+    title = args.title or "⏰ Reminder"
+
+    # Human-readable display
+    parts = []
+    for unit, label in [(3600, "h"), (60, "m"), (1, "s")]:
+        if total_seconds >= unit:
+            parts.append(f"{total_seconds // unit}{label}")
+            total_seconds %= unit
+    display = " ".join(parts)
+
+    print(f"⏰ Reminder set: '{message}' in {display}")
+    log.info(f"One-shot reminder set: '{message}' in {display}")
+
+    # Fork into background so terminal is freed immediately
+    if platform.system() != "Windows":
+        pid = os.fork()
+        if pid > 0:
+            return  # parent exits, child continues
+    else:
+        # Windows: re-launch as detached subprocess and exit
+        subprocess.Popen(
+            [sys.argv[0], "_remind-fire",
+             "--message", message,
+             "--title", title,
+             "--seconds", str(total_seconds + sum(
+                 v * u for v, u in zip(
+                     [int(p[:-1]) for p in parts],
+                     [3600 if 'h' in p else 60 if 'm' in p else 1 for p in parts]
+                 )
+             ))],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+        return
+
+    # Child process — sleep then fire
+    config = load_config()
+    sound = config.get("sound", True)
+    slack_config = config.get("slack", {})
+
+    time.sleep(total_seconds)
+    notify(
+        title,
+        message,
+        urgency="critical",
+        sound=sound,
+        slack_config=slack_config if slack_config.get("enabled") else None,
+    )
+    log.info(f"One-shot reminder fired: '{message}'")
+    sys.exit(0)
+
+def cmd_remind_fire(args):
+    """Internal command used by Windows to fire a one-shot reminder."""
+    time.sleep(args.seconds)
+    config = load_config()
+    sound = config.get("sound", True)
+    slack_config = config.get("slack", {})
+    notify(
+        args.title,
+        args.message,
+        urgency="critical",
+        sound=sound,
+        slack_config=slack_config if slack_config.get("enabled") else None,
+    )
+    log.info(f"One-shot reminder fired: '{args.message}'")
+    
 def get_key():
     if tty is None or termios is None:
         return input("Enter choice: ")
@@ -1257,7 +1338,6 @@ def cmd_completion(args):
     elif args.shell == "fish":
         print(FISH_COMPLETION)
 
-
 def main():
     parser = argparse.ArgumentParser(
         prog="kim",
@@ -1276,6 +1356,7 @@ commands:
   enable      Enable a reminder
   disable     Disable a reminder
   update      Update a reminder
+  remind      Fire a one-shot reminder after a delay
   interactive Enter interactive mode (alias: -i)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
@@ -1351,11 +1432,27 @@ logs:   ~/.kim/kim.log
     update_p.add_argument("--enable", action="store_true", help="Enable the reminder")
     update_p.add_argument("--disable", action="store_true", help="Disable the reminder")
 
+    remind_p = sub.add_parser("remind", help="Fire a one-shot reminder after a delay")
+    remind_p.add_argument("message", help="Reminder message")
+    remind_p.add_argument(
+        "time",
+        nargs="+",
+        help="When to fire, e.g: 'in 10m', '1h', '2h 30m', '90s'",
+    )
+    remind_p.add_argument("-t", "--title", help="Notification title (default: ⏰ Reminder)")
+
+    # Hidden — used internally by Windows background process
+    fire_p = sub.add_parser("_remind-fire")
+    fire_p.add_argument("--message", required=True)
+    fire_p.add_argument("--title", default="⏰ Reminder")
+    fire_p.add_argument("--seconds", type=int, required=True)
+
     sub.add_parser("interactive", help="Enter interactive mode").add_argument(
         "-i", action="store_true", dest="interactive_alias"
     )
 
-    sub.add_parser("self-update", help="Check for and install updates").add_argument(
+    selfupdate_p = sub.add_parser("self-update", help="Check for and install updates")
+    selfupdate_p.add_argument(
         "-f", "--force", action="store_true", help="Skip confirmation prompt"
     )
 
@@ -1399,13 +1496,7 @@ logs:   ~/.kim/kim.log
     comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
 
     if "-i" in sys.argv:
-        new_argv = []
-        for a in sys.argv:
-            if a == "-i":
-                new_argv.append("interactive")
-            else:
-                new_argv.append(a)
-        sys.argv = new_argv
+        sys.argv = [a if a != "-i" else "interactive" for a in sys.argv]
 
     args = parser.parse_args()
 
@@ -1421,6 +1512,8 @@ logs:   ~/.kim/kim.log
         "enable": cmd_enable,
         "disable": cmd_disable,
         "update": cmd_update,
+        "remind": cmd_remind,
+        "_remind-fire": cmd_remind_fire,
         "interactive": cmd_interactive,
         "self-update": cmd_selfupdate,
         "uninstall": cmd_uninstall,

@@ -1,4 +1,4 @@
-# kim — keep in mind
+# kim — keep in mind 🧠
 
 > Lightweight cross-platform reminder daemon for developers.  
 > No UI. Config-driven. Runs in the background.
@@ -35,6 +35,7 @@ kim remove         Remove a reminder
 kim enable         Enable a reminder
 kim disable        Disable a reminder
 kim update         Update a reminder
+kim remind         Fire a one-shot reminder after a delay
 kim interactive    Enter interactive mode (-i)
 kim self-update    Check for and install updates
 kim uninstall      Uninstall kim completely
@@ -45,11 +46,20 @@ kim slack          Slack notification settings
 kim completion     Generate shell completions
 ```
 
+### One-shot reminders
+
+```bash
+kim remind "standup call" in 10m
+kim remind "take a break" in 1h
+kim remind "check the oven" in 25m
+kim remind "deploy window opens" in 2h 30m
+```
+
+Fires once, runs in the background, frees your terminal immediately.
+
 ---
 
 ## Config — `~/.kim/config.json`
-
-This is the only file you need to touch.
 
 ```json
 {
@@ -75,16 +85,16 @@ This is the only file you need to touch.
 }
 ```
 
-| Field              | Values                           | Description                      |
-|--------------------|----------------------------------|----------------------------------|
-| `name`             | string                           | Unique identifier                |
-| `interval_minutes` | number or string (e.g. "30m", "1h", "1d") | How often to fire |
-| `title`            | string                           | Notification heading             |
-| `message`          | string                           | Notification body                |
-| `urgency`          | `low` / `normal` / `critical`   | Controls notification priority   |
-| `enabled`          | `true` / `false`                | Toggle without deleting          |
-| `sound`            | `true` / `false`                 | (top-level) Play sound globally |
-| `slack`            | object                           | (top-level) Slack notification settings |
+| Field | Values | Description |
+|---|---|---|
+| `name` | string | Unique identifier |
+| `interval_minutes` | number or string (`"30m"`, `"1h"`, `"1d"`) | How often to fire |
+| `title` | string | Notification heading |
+| `message` | string | Notification body |
+| `urgency` | `low` / `normal` / `critical` | Notification priority |
+| `enabled` | `true` / `false` | Toggle without deleting |
+| `sound` | `true` / `false` | (top-level) Play sound globally |
+| `slack` | object | (top-level) Slack settings |
 
 ### Slack Integration
 
@@ -101,80 +111,45 @@ This is the only file you need to touch.
 }
 ```
 
-**Choose one method:**
-- **Webhook**: Create an incoming webhook at `https://api.slack.com/messaging/webhooks`
-- **Bot Token**: Create a Slack app with `chat:write` scope and install to your workspace
-
-Test your setup:
-```bash
-kim slack --test
-```
-
-After editing, apply changes:
-```bash
-kim stop && kim start
-```
+Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 
 ---
 
 ## How it works
 
-| Platform | Autostart          | Notifications         |
-|----------|--------------------|-----------------------|
-| Linux    | systemd user service | `notify-send`       |
-| macOS    | launchd agent      | `osascript`           |
-| Windows  | Task Scheduler     | PowerShell toast      |
+| Platform | Autostart | Notifications |
+|---|---|---|
+| Linux | systemd user service | `notify-send` |
+| macOS | launchd agent | `osascript` |
+| Windows | Task Scheduler | PowerShell toast |
 
 - **Pure Python stdlib** — no pip installs
 - Each reminder runs in its own thread
-- Logs at `~/.kim/kim.log`
-- PID tracked at `~/.kim/kim.pid`
+- Config changes are detected automatically — no need to restart manually
+- Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
 
 ---
 
 ## Uninstall
 
-**Quick uninstall (use the built-in command)**
 ```bash
 kim uninstall
 ```
 
-**Manual uninstall**
-
-**Linux**
-```bash
-systemctl --user disable --now kim.service
-rm ~/.config/systemd/user/kim.service
-rm -rf ~/.kim ~/.local/bin/kim
-```
-
-**macOS**
-```bash
-launchctl unload ~/Library/LaunchAgents/io.kim.reminder.plist
-rm ~/Library/LaunchAgents/io.kim.reminder.plist
-rm -rf ~/.kim ~/.local/bin/kim
-```
-
-**Windows**
-```powershell
-Unregister-ScheduledTask -TaskName KimReminder -Confirm:$false
-Remove-Item -Recurse "$env:USERPROFILE\.kim"
-```
-
 ---
 
-## Roadmap ideas
+## Roadmap
 
-- [x] `kim add` / `kim remove` — manage reminders from CLI without editing JSON
-- [x] Interactive mode (`kim interactive`)
-- [x] Export/import functionality
-- [x] Self-update (`kim self-update`)
-- [x] Uninstall command (`kim uninstall`)
-- [x] Config validation (`kim validate`)
+- [x] CLI reminder management (`kim add`, `kim remove`, etc.)
+- [x] Interactive mode
+- [x] Export / import
+- [x] Self-update
+- [x] Uninstall command
+- [x] Config validation
 - [x] Slack / webhook notifications
-- One-shot reminders (`kim remind "standup" in 10m`)
-- Per-reminder schedule (cron-style, not just interval)
-- Plugin system for custom notification channels
+- [x] One-shot reminders (`kim remind "standup" in 10m`)
+- [ ] Per-reminder cron-style schedule
+- [ ] Plugin system for custom notification channels
 
 ---
 
