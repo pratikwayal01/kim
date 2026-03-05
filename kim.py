@@ -967,7 +967,7 @@ def cmd_uninstall(args):
         sys.exit(1)
 
     confirm = (
-        input("This will remove kim data and the binary. Continue? (y/N): ")
+        input("This will remove kim data and the binary. Continue? (Y/N): ")
         .strip()
         .lower()
     )
