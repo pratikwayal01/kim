@@ -628,7 +628,11 @@ def cmd_start(args):
         PID_FILE.unlink(missing_ok=True)
         sys.exit(0)
 
-    signal.signal(signal.SIGTERM, shutdown)
+    # SIGTERM can be delivered on Unix; on Windows it cannot be sent from
+    # another process (os.kill raises WinError 87), so only register it
+    # where it actually works.  SIGINT (Ctrl-C) works on both platforms.
+    if platform.system() != "Windows":
+        signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
     notify(
@@ -648,13 +652,49 @@ def cmd_start(args):
         shutdown(None, None)
 
 
+def _terminate_process(pid: int) -> None:
+    """
+    Terminate a process by PID in a cross-platform way.
+
+    - Unix: sends SIGTERM so the shutdown handler runs gracefully.
+    - Windows: os.kill(pid, signal.SIGTERM) raises WinError 87 because SIGTERM
+      is not a real Win32 signal that can be delivered across processes.
+      Instead we use taskkill /F which forcefully terminates the process.
+      Because the process is killed before it can run cleanup code, the caller
+      is responsible for removing the PID file.
+
+    Raises:
+        ProcessLookupError  if the PID does not exist.
+        PermissionError     if the caller lacks rights to terminate the process.
+        RuntimeError        if taskkill fails for another reason (Windows only).
+    """
+    if platform.system() == "Windows":
+        result = subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return
+        stderr = result.stderr.lower()
+        if "not found" in stderr or "no running instance" in stderr:
+            raise ProcessLookupError(f"No process with PID {pid}")
+        if "access is denied" in stderr:
+            raise PermissionError(f"Access denied for PID {pid}")
+        raise RuntimeError(f"taskkill failed: {result.stderr.strip()}")
+    else:
+        os.kill(pid, signal.SIGTERM)
+
+
 def cmd_stop(args):
     if not PID_FILE.exists():
         print("kim is not running.")
         sys.exit(0)
     pid = int(PID_FILE.read_text().strip())
     try:
-        os.kill(pid, signal.SIGTERM)
+        _terminate_process(pid)
+        # On Windows the process is killed before its cleanup handler runs,
+        # so we always remove the PID file here on all platforms.
         PID_FILE.unlink(missing_ok=True)
         print(f"kim stopped (PID {pid}).")
         log.info(f"Stopped by user (PID {pid})")
@@ -662,7 +702,9 @@ def cmd_stop(args):
         print("Process not found — cleaning up stale PID file.")
         PID_FILE.unlink(missing_ok=True)
     except PermissionError:
-        print(f"Permission denied to kill PID {pid}.")
+        print(f"Permission denied to stop PID {pid}.")
+    except RuntimeError as e:
+        print(f"Failed to stop kim: {e}")
 
 
 def cmd_status(args):
@@ -1910,4 +1952,4 @@ logs:   ~/.kim/kim.log
 
 
 if __name__ == "__main__":
-    main()
+    main()  
