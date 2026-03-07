@@ -44,6 +44,11 @@ kim import         Import reminders from file
 kim validate       Validate config file
 kim slack          Slack notification settings
 kim completion     Generate shell completions
+kim sound                          # show current config + format notes
+kim sound --set ~/sounds/bell.mp3  # set custom file (validates on set)
+kim sound --clear                  # revert to system default
+kim sound --test                   # play it immediately
+kim sound --enable / --disable     # toggle sound on/off
 ```
 
 ### One-shot reminders
