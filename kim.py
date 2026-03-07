@@ -41,7 +41,7 @@ LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
 KIM_DIR.mkdir(exist_ok=True)
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -49,6 +49,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    encoding="utf-8",
 )
 log = logging.getLogger("kim")
 
@@ -74,6 +75,7 @@ DEFAULT_CONFIG = {
         },
     ],
     "sound": True,
+    "sound_file": None,
     "slack": {
         "enabled": False,
         "webhook_url": "",
@@ -95,7 +97,132 @@ def _linux_env():
     return env
 
 
-def _notify_linux(title, message, urgency, sound):
+# ── Custom sound playback ─────────────────────────────────────────────────────
+
+# Supported formats per player (informational; players may accept more).
+# Documented so users know what to expect per platform.
+_SOUND_FORMAT_NOTES = {
+    "Linux":   "paplay: wav/ogg/flac/mp3  |  aplay: wav  |  ffplay/mpv: any",
+    "Darwin":  "afplay: wav/mp3/aiff/m4a/aac and most formats macOS can decode",
+    "Windows": "winsound: wav only  |  powershell SoundPlayer: wav only",
+}
+
+
+def _play_sound_file_linux(path: str, env: dict) -> None:
+    """Play a custom sound file on Linux, trying players in order of preference."""
+    players = [
+        ["paplay", path],
+        ["aplay", path],
+        ["ffplay", "-nodisp", "-autoexit", path],
+        ["mpv", "--no-video", path],
+        ["cvlc", "--play-and-exit", path],
+    ]
+    for cmd in players:
+        if shutil.which(cmd[0]):
+            try:
+                subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            except Exception as e:
+                log.warning(f"Sound player {cmd[0]} failed: {e}")
+    log.error(f"No supported audio player found to play: {path}")
+
+
+def _play_sound_file_mac(path: str) -> None:
+    """Play a custom sound file on macOS using afplay."""
+    if shutil.which("afplay"):
+        try:
+            subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            log.error(f"afplay failed: {e}")
+    else:
+        log.error("afplay not found — cannot play custom sound on macOS")
+
+
+def _play_sound_file_windows(path: str) -> None:
+    """
+    Play a custom sound file on Windows.
+    Prefers the stdlib winsound module (wav only, no external deps).
+    Falls back to PowerShell SoundPlayer for wav, or Windows Media Player for other formats.
+    """
+    p = Path(path)
+    if not p.exists():
+        log.error(f"Sound file not found: {path}")
+        return
+
+    if p.suffix.lower() == ".wav":
+        # Try stdlib winsound first (zero-dependency, wav only)
+        try:
+            import winsound
+            winsound.PlaySound(str(p), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            return
+        except Exception as e:
+            log.warning(f"winsound failed: {e}")
+
+        # Fallback: PowerShell SoundPlayer (also wav only)
+        ps_path = str(p).replace("'", "''")
+        ps = f"[System.Media.SoundPlayer]::new('{ps_path}').Play()"
+        try:
+            subprocess.Popen(
+                ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            return
+        except Exception as e:
+            log.warning(f"PowerShell SoundPlayer failed: {e}")
+    else:
+        # Non-wav: try Windows Media Player via PowerShell, then wmplayer.exe
+        safe = str(p).replace("'", "''")
+        ps = (
+            f"$wmp = New-Object -ComObject WMPlayer.OCX; "
+            f"$wmp.URL = '{safe}'; "
+            f"$wmp.controls.play(); "
+            f"Start-Sleep -s ([int]$wmp.currentMedia.duration + 1)"
+        )
+        try:
+            subprocess.Popen(
+                ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            return
+        except Exception as e:
+            log.warning(f"PowerShell WMP failed: {e}")
+
+        if shutil.which("ffplay"):
+            try:
+                subprocess.Popen(
+                    ["ffplay", "-nodisp", "-autoexit", str(p)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+                return
+            except Exception as e:
+                log.warning(f"ffplay failed: {e}")
+
+    log.error(f"Could not play sound file: {path}")
+
+
+def _validate_sound_file(path: str) -> tuple[bool, str]:
+    """
+    Validate that a sound file exists and has a recognised audio extension.
+    Returns (ok: bool, error_message: str).
+    """
+    SUPPORTED_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".aiff", ".aif", ".m4a", ".aac", ".oga"}
+    p = Path(path)
+    if not p.exists():
+        return False, f"File not found: {path}"
+    if not p.is_file():
+        return False, f"Not a file: {path}"
+    if p.suffix.lower() not in SUPPORTED_EXTS:
+        return False, (
+            f"Unrecognised extension '{p.suffix}'. "
+            f"Supported: {', '.join(sorted(SUPPORTED_EXTS))}"
+        )
+    return True, ""
+
+
+def _notify_linux(title, message, urgency, sound, sound_file=None):
     env = _linux_env()
     u = urgency if urgency in ("low", "normal", "critical") else "normal"
     try:
@@ -108,19 +235,30 @@ def _notify_linux(title, message, urgency, sound):
         log.error(f"notify-send: {e}")
 
     if sound:
-        for cmd in (
-            ["canberra-gtk-play", "--id=bell"],
-            ["paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"],
-        ):
-            if subprocess.run(["which", cmd[0]], capture_output=True).returncode == 0:
-                subprocess.Popen(cmd, env=env, stderr=subprocess.DEVNULL)
-                break
+        if sound_file:
+            _play_sound_file_linux(sound_file, env)
+        else:
+            for cmd in (
+                ["canberra-gtk-play", "--id=bell"],
+                ["paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"],
+            ):
+                if shutil.which(cmd[0]):
+                    subprocess.Popen(cmd, env=env, stderr=subprocess.DEVNULL)
+                    break
 
 
-def _notify_mac(title, message, urgency, sound):
-    t = title.replace('"', '\\"')
-    m = message.replace('"', '\\"').replace("\n", " ")
-    snd = 'sound name "Glass"' if sound else ""
+def _notify_mac(title, message, urgency, sound, sound_file=None):
+    # Escape for AppleScript string literals: backslash first, then double-quote
+    def _as(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').replace('\r', '')
+    t = _as(title)
+    m = _as(message)
+
+    if sound and sound_file:
+        # Show toast without built-in sound; play custom file separately via afplay
+        snd = ""
+    else:
+        snd = 'sound name "Glass"' if sound else ""
+
     try:
         subprocess.run(
             ["osascript", "-e", f'display notification "{m}" with title "{t}" {snd}'],
@@ -129,8 +267,11 @@ def _notify_mac(title, message, urgency, sound):
     except Exception as e:
         log.error(f"osascript: {e}")
 
+    if sound and sound_file:
+        _play_sound_file_mac(sound_file)
 
-def _notify_windows(title, message, urgency, sound):
+
+def _notify_windows(title, message, urgency, sound, sound_file=None):
     t = title.replace("'", "\\'")
     m = message.replace("\n", " ").replace("'", "\\'")
     ps = f"""
@@ -151,22 +292,26 @@ $n = [Windows.UI.Notifications.ToastNotification]::new($xml)
     except Exception as e:
         log.error(f"powershell toast: {e}")
 
+    if sound and sound_file:
+        _play_sound_file_windows(sound_file)
+
 
 def notify(
     title: str,
     message: str,
     urgency: str = "normal",
     sound: bool = True,
+    sound_file: str = None,
     slack_config: dict = None,
 ):
     system = platform.system()
     log.info(f"notify [{urgency}] → {title}")
     if system == "Linux":
-        _notify_linux(title, message, urgency, sound)
+        _notify_linux(title, message, urgency, sound, sound_file)
     elif system == "Darwin":
-        _notify_mac(title, message, urgency, sound)
+        _notify_mac(title, message, urgency, sound, sound_file)
     elif system == "Windows":
-        _notify_windows(title, message, urgency, sound)
+        _notify_windows(title, message, urgency, sound, sound_file)
     else:
         log.warning(f"Unsupported platform: {system}")
 
@@ -420,20 +565,21 @@ class KimScheduler:
 
 def load_config() -> dict:
     if not CONFIG.exists():
-        CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2))
+        CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding='utf-8')
         print(f"Created default config: {CONFIG}")
-    with open(CONFIG) as f:
+    with open(CONFIG, encoding='utf-8') as f:
         return json.load(f)
 
 
 def cmd_start(args):
     if PID_FILE.exists():
-        pid = PID_FILE.read_text().strip()
+        pid = PID_FILE.read_text(encoding='utf-8').strip()
         print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
         sys.exit(1)
 
     config = load_config()
     sound = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
     slack_config = config.get("slack", {})
     active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
 
@@ -441,18 +587,28 @@ def cmd_start(args):
         print("No enabled reminders in config. Edit ~/.kim/config.json")
         sys.exit(0)
 
-    PID_FILE.write_text(str(os.getpid()))
+    # Validate sound_file at startup so users get an early warning
+    if sound and sound_file:
+        ok, err = _validate_sound_file(sound_file)
+        if not ok:
+            print(f"\u26a0 Warning: sound_file problem \u2014 {err}")
+            print("  Falling back to system default sound.")
+            sound_file = None
 
-    print(f"kim v{VERSION} — {len(active)} reminder(s) active")
+    PID_FILE.write_text(str(os.getpid()), encoding='utf-8')
+
+    print(f"kim v{VERSION} \u2014 {len(active)} reminder(s) active")
     for r in active:
         interval = r.get("interval_minutes", 30)
         interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
-        print(f"  • {r['name']:<20} every {interval_str}")
+        print(f"  \u2022 {r['name']:<20} every {interval_str}")
+    if sound_file:
+        print(f"  Sound: {sound_file}")
     print(f"Log: {LOG_FILE}")
 
-    log.info(f"kim v{VERSION} started — PID {os.getpid()}")
+    log.info(f"kim v{VERSION} started \u2014 PID {os.getpid()}")
 
-    # ── Build a notifier that uses KIM's existing notify() with sound + slack ──
+    # \u2500\u2500 Build a notifier that uses KIM's existing notify() with sound + slack \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     _slack = slack_config if slack_config.get("enabled") else None
 
     def kim_notifier(reminder: dict) -> None:
@@ -461,6 +617,7 @@ def cmd_start(args):
             message=reminder.get("message", ""),
             urgency=reminder.get("urgency", "normal"),
             sound=sound,
+            sound_file=sound_file,
             slack_config=_slack,
         )
         log.info(f"[{reminder.get('name')}] fired")
@@ -474,7 +631,11 @@ def cmd_start(args):
         PID_FILE.unlink(missing_ok=True)
         sys.exit(0)
 
-    signal.signal(signal.SIGTERM, shutdown)
+    # SIGTERM can be delivered on Unix; on Windows it cannot be sent from
+    # another process (os.kill raises WinError 87), so only register it
+    # where it actually works.  SIGINT (Ctrl-C) works on both platforms.
+    if platform.system() != "Windows":
+        signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
     notify(
@@ -494,13 +655,49 @@ def cmd_start(args):
         shutdown(None, None)
 
 
+def _terminate_process(pid: int) -> None:
+    """
+    Terminate a process by PID in a cross-platform way.
+
+    - Unix: sends SIGTERM so the shutdown handler runs gracefully.
+    - Windows: os.kill(pid, signal.SIGTERM) raises WinError 87 because SIGTERM
+      is not a real Win32 signal that can be delivered across processes.
+      Instead we use taskkill /F which forcefully terminates the process.
+      Because the process is killed before it can run cleanup code, the caller
+      is responsible for removing the PID file.
+
+    Raises:
+        ProcessLookupError  if the PID does not exist.
+        PermissionError     if the caller lacks rights to terminate the process.
+        RuntimeError        if taskkill fails for another reason (Windows only).
+    """
+    if platform.system() == "Windows":
+        result = subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return
+        stderr = result.stderr.lower()
+        if "not found" in stderr or "no running instance" in stderr:
+            raise ProcessLookupError(f"No process with PID {pid}")
+        if "access is denied" in stderr:
+            raise PermissionError(f"Access denied for PID {pid}")
+        raise RuntimeError(f"taskkill failed: {result.stderr.strip()}")
+    else:
+        os.kill(pid, signal.SIGTERM)
+
+
 def cmd_stop(args):
     if not PID_FILE.exists():
         print("kim is not running.")
         sys.exit(0)
-    pid = int(PID_FILE.read_text().strip())
+    pid = int(PID_FILE.read_text(encoding='utf-8').strip())
     try:
-        os.kill(pid, signal.SIGTERM)
+        _terminate_process(pid)
+        # On Windows the process is killed before its cleanup handler runs,
+        # so we always remove the PID file here on all platforms.
         PID_FILE.unlink(missing_ok=True)
         print(f"kim stopped (PID {pid}).")
         log.info(f"Stopped by user (PID {pid})")
@@ -508,7 +705,31 @@ def cmd_stop(args):
         print("Process not found — cleaning up stale PID file.")
         PID_FILE.unlink(missing_ok=True)
     except PermissionError:
-        print(f"Permission denied to kill PID {pid}.")
+        print(f"Permission denied to stop PID {pid}.")
+    except RuntimeError as e:
+        print(f"Failed to stop kim: {e}")
+
+
+def _is_process_running(pid: int) -> bool:
+    """
+    Cross-platform process-existence check.
+    Uses signal 0 on Unix (doesn't kill, just probes).
+    Uses tasklist on Windows.
+    Returns False for any error, including permission errors — caller
+    should treat an unverifiable PID as potentially stale.
+    """
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True,
+            )
+            return str(pid) in result.stdout
+        else:
+            os.kill(pid, 0)   # signal 0 = existence check only
+            return True
+    except (ProcessLookupError, PermissionError, OSError):
+        return False
 
 
 def cmd_status(args):
@@ -517,13 +738,32 @@ def cmd_status(args):
     paused = [r for r in config.get("reminders", []) if not r.get("enabled", True)]
 
     if PID_FILE.exists():
-        pid = PID_FILE.read_text().strip()
-        print(f"● kim running   PID {pid}")
+        pid_str = PID_FILE.read_text(encoding='utf-8').strip()
+        try:
+            pid = int(pid_str)
+            if _is_process_running(pid):
+                print(f"● kim running   PID {pid}")
+            else:
+                PID_FILE.unlink(missing_ok=True)
+                print("○ kim stopped  (removed stale PID file)")
+        except ValueError:
+            PID_FILE.unlink(missing_ok=True)
+            print("○ kim stopped  (removed invalid PID file)")
     else:
         print("○ kim stopped")
 
     print(f"\n  Config : {CONFIG}")
-    print(f"  Log    : {LOG_FILE}\n")
+    print(f"  Log    : {LOG_FILE}")
+
+    sound_enabled = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
+    if not sound_enabled:
+        print("  Sound  : disabled")
+    elif sound_file:
+        print(f"  Sound  : {sound_file}")
+    else:
+        print("  Sound  : system default")
+    print()
 
     if active:
         print("  Active reminders:")
@@ -535,6 +775,94 @@ def cmd_status(args):
         print("  Disabled reminders:")
         for r in paused:
             print(f"    - {r['name']}")
+
+
+def cmd_sound(args):
+    """Manage the custom sound file for notifications."""
+    config = load_config()
+
+    if args.set:
+        path = os.path.abspath(os.path.expanduser(args.set))
+        ok, err = _validate_sound_file(path)
+        if not ok:
+            print(f"✗ {err}")
+            sys.exit(1)
+        config["sound_file"] = path
+        config["sound"] = True
+        with open(CONFIG, "w") as f:
+            json.dump(config, f, indent=2)
+        print(f"✓ Custom sound set: {path}")
+        print("  Restart kim ('kim stop && kim start') to apply.")
+        log.info(f"sound_file set to: {path}")
+        return
+
+    if args.clear:
+        config["sound_file"] = None
+        with open(CONFIG, "w") as f:
+            json.dump(config, f, indent=2)
+        print("✓ Custom sound cleared — reverted to system default.")
+        print("  Restart kim ('kim stop && kim start') to apply.")
+        log.info("sound_file cleared")
+        return
+
+    if args.test:
+        sound_enabled = config.get("sound", True)
+        if not sound_enabled:
+            print("Sound is currently disabled. Enable it first with 'kim sound --enable'.")
+            sys.exit(1)
+        sound_file = config.get("sound_file") or None
+        if sound_file:
+            ok, err = _validate_sound_file(sound_file)
+            if not ok:
+                print(f"✗ Cannot play: {err}")
+                sys.exit(1)
+            print(f"▶ Playing: {sound_file}")
+        else:
+            print("▶ Playing system default sound...")
+        notify(
+            "🔔 kim sound test",
+            "This is how your reminder will sound.",
+            urgency="normal",
+            sound=True,
+            sound_file=sound_file,
+        )
+        return
+
+    if args.enable:
+        config["sound"] = True
+        with open(CONFIG, "w") as f:
+            json.dump(config, f, indent=2)
+        print("✓ Sound enabled.")
+        return
+
+    if args.disable:
+        config["sound"] = False
+        with open(CONFIG, "w") as f:
+            json.dump(config, f, indent=2)
+        print("✓ Sound disabled.")
+        return
+
+    # Default: show current sound config
+    sound_enabled = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
+    system = platform.system()
+
+    print("Sound configuration:")
+    print(f"  Enabled   : {'yes' if sound_enabled else 'no'}")
+    if sound_file:
+        ok, err = _validate_sound_file(sound_file)
+        status = "✓ file found" if ok else f"✗ {err}"
+        print(f"  Sound file: {sound_file}  [{status}]")
+    else:
+        print("  Sound file: (system default)")
+    print(f"  Platform  : {system}")
+    print(f"  Formats   : {_SOUND_FORMAT_NOTES.get(system, 'unknown platform')}")
+    print()
+    print("Commands:")
+    print("  kim sound --set /path/to/sound.wav   Set a custom sound file")
+    print("  kim sound --clear                    Revert to system default")
+    print("  kim sound --test                     Play the current sound")
+    print("  kim sound --enable / --disable       Toggle sound on/off")
 
 
 def cmd_list(args):
@@ -559,15 +887,20 @@ def cmd_logs(args):
     if not LOG_FILE.exists():
         print("No log file yet.")
         return
-    lines = LOG_FILE.read_text().splitlines()
+    lines = LOG_FILE.read_text(encoding='utf-8').splitlines()
     for line in lines[-n:]:
         print(line)
 
 
 def cmd_edit(args):
-    editor = os.environ.get("EDITOR", "nano")
     load_config()  # ensure config exists
-    os.execvp(editor, [editor, str(CONFIG)])
+    if platform.system() == "Windows":
+        # os.execvp is POSIX-only; notepad is always available on Windows
+        editor = os.environ.get("EDITOR", "notepad")
+        subprocess.run([editor, str(CONFIG)])
+    else:
+        editor = os.environ.get("EDITOR", "nano")
+        os.execvp(editor, [editor, str(CONFIG)])
 
 
 def cmd_add(args):
@@ -591,7 +924,7 @@ def cmd_add(args):
 
     config.setdefault("reminders", []).append(new_reminder)
 
-    with open(CONFIG, "w") as f:
+    with open(CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Added reminder '{name}' (every {interval_str})")
@@ -610,7 +943,7 @@ def cmd_remove(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w") as f:
+    with open(CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Removed reminder '{name}'")
@@ -632,7 +965,7 @@ def cmd_enable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w") as f:
+    with open(CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Enabled reminder '{name}'")
@@ -654,7 +987,7 @@ def cmd_disable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w") as f:
+    with open(CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Disabled reminder '{name}'")
@@ -687,11 +1020,29 @@ def cmd_update(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w") as f:
+    with open(CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Updated reminder '{name}'")
     log.info(f"Updated reminder: {name}")
+
+
+def _windows_subprocess_cmd():
+    """
+    Return the correct command prefix to re-invoke this script on Windows.
+
+    - If running as a PyInstaller/cx_Freeze frozen exe: [sys.executable]
+    - If running as a .py script via python.exe:        [sys.executable, script_path]
+    - If running via a pip-installed console_scripts entry point (.exe wrapper):
+      the wrapper already embeds the python path, but sys.argv[0] is the .exe,
+      so we still use [sys.executable, script_path] pointing to the real .py.
+    """
+    if getattr(sys, "frozen", False):
+        # Frozen executable — the exe IS the interpreter
+        return [sys.executable]
+    script = os.path.abspath(sys.argv[0])
+    return [sys.executable, script]
+
 
 def cmd_remind(args):
     raw = " ".join(args.time)
@@ -712,79 +1063,151 @@ def cmd_remind(args):
     sleep_seconds = total_seconds
 
     parts = []
+    remaining = total_seconds
     for unit, label in [(3600, "h"), (60, "m"), (1, "s")]:
-        if total_seconds >= unit:
-            parts.append(f"{total_seconds // unit}{label}")
-            total_seconds %= unit
+        if remaining >= unit:
+            parts.append(f"{remaining // unit}{label}")
+            remaining %= unit
     display = " ".join(parts)
 
     print(f"⏰ Reminder set: '{message}' in {display}")
     log.info(f"One-shot reminder set: '{message}' in {display}")
 
-    if platform.system() != "Windows":
-        pid = os.fork()
-        if pid > 0:
-            return
-        time.sleep(sleep_seconds)
-    else:
+    if platform.system() == "Windows":
+        # FIX 1: build cmd with sys.executable so Windows can actually launch it.
+        # FIX 2: omit close_fds=True — it is not supported on Windows.
+        cmd = _windows_subprocess_cmd() + [
+            "_remind-fire",
+            "--message", message,
+            "--title", title,
+            "--seconds", str(sleep_seconds),
+        ]
         subprocess.Popen(
-            [sys.argv[0], "_remind-fire",
-             "--message", message,
-             "--title", title,
-             "--seconds", str(sleep_seconds)],
+            cmd,
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-            close_fds=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
         )
         return
 
+    # Unix: fork a background child
+    pid = os.fork()
+    if pid > 0:
+        return  # parent returns immediately
+
+    # Child process: sleep then fire
     config = load_config()
     sound = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
     slack_config = config.get("slack", {})
 
-    time.sleep(total_seconds)
+    time.sleep(sleep_seconds)
     notify(
         title,
         message,
         urgency="critical",
         sound=sound,
+        sound_file=sound_file,
         slack_config=slack_config if slack_config.get("enabled") else None,
     )
     log.info(f"One-shot reminder fired: '{message}'")
     sys.exit(0)
+
 
 def cmd_remind_fire(args):
     """Internal command used by Windows to fire a one-shot reminder."""
     time.sleep(args.seconds)
     config = load_config()
     sound = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
     slack_config = config.get("slack", {})
     notify(
         args.title,
         args.message,
         urgency="critical",
         sound=sound,
+        sound_file=sound_file,
         slack_config=slack_config if slack_config.get("enabled") else None,
     )
     log.info(f"One-shot reminder fired: '{args.message}'")
 
-def get_key():
+def _enable_windows_ansi() -> None:
+    """
+    Enable VT100/ANSI escape-sequence processing in the Windows console.
+    Required on Windows 10+ to make \033[...m colour codes and \033[2J clear
+    actually work instead of printing as literal garbage.
+    No-ops on older Windows or if already enabled.
+    """
+    try:
+        import ctypes
+        STD_OUTPUT_HANDLE = -11
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        mode = ctypes.c_ulong(0)
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:
+        pass
+
+
+def get_key() -> str:
+    """
+    Read a single keypress and return a normalised key string.
+
+    Normalised values (same on every platform):
+      "UP"    arrow up
+      "DOWN"  arrow down
+      "\n"    Enter
+      "\x03"  Ctrl-C
+      "q"     q
+      (any other single printable character)
+
+    On Windows uses msvcrt.getwch() so no Enter is required.
+    On Unix uses tty/termios raw mode; falls back to input() if not a tty
+    (e.g. when stdin is redirected).
+    """
+    if platform.system() == "Windows":
+        import msvcrt
+        ch = msvcrt.getwch()
+        # \x00 and \xe0 are the two-byte prefix for special keys (arrows etc.)
+        if ch in ('\x00', '\xe0'):
+            ch2 = msvcrt.getwch()
+            return {"H": "UP", "P": "DOWN"}.get(ch2, "")
+        if ch == "\r":   # Windows Enter comes as \r, not \n
+            return "\n"
+        return ch
+
+    # ── Unix path ─────────────────────────────────────────────────────────────
     if tty is None or termios is None:
-        return input("Enter choice: ")
+        # tty/termios not available at all — plain line input
+        line = input()
+        return line if line else "\n"
 
     try:
         fd = sys.stdin.fileno()
         if not os.isatty(fd):
-            return input("Enter choice: ")
-    except:
-        return input("Enter choice: ")
+            line = input()
+            return line if line else "\n"
+    except Exception:
+        line = input()
+        return line if line else "\n"
 
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
         ch = sys.stdin.read(1)
+        # Escape sequence: \x1b [ A/B = up/down
+        if ch == "\x1b":
+            extra = sys.stdin.read(1)
+            if extra == "[":
+                direction = sys.stdin.read(1)
+                return {"A": "UP", "B": "DOWN"}.get(direction, "")
+            return ""   # other escape sequence — ignore
+        return ch
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return ch
 
 
 def get_screen_size():
@@ -1039,15 +1462,10 @@ def cmd_interactive(args):
 
             key = get_key()
 
-            if key == "\x1b":
-                if tty and termios:
-                    extra = sys.stdin.read(1)
-                    if extra == "[":
-                        direction = sys.stdin.read(1)
-                        if direction == "A":
-                            selected = (selected - 1) % options_count
-                        elif direction == "B":
-                            selected = (selected + 1) % options_count
+            if key == "UP":
+                selected = (selected - 1) % options_count
+            elif key == "DOWN":
+                selected = (selected + 1) % options_count
             elif key == "\n":
                 if selected == 0:
                     list_reminders()
@@ -1129,7 +1547,14 @@ def cmd_selfupdate(args):
             if kim_in_path:
                 kim_path = Path(kim_in_path).resolve()
             else:
-                kim_path = Path.home() / ".local" / "bin" / "kim"
+                if platform.system() == "Windows":
+                    kim_path = Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe"
+                elif platform.system() == "Darwin":
+                    # Prefer Homebrew prefix if available, otherwise ~/.local/bin
+                    brew_bin = Path("/opt/homebrew/bin/kim")
+                    kim_path = brew_bin if brew_bin.parent.exists() else Path.home() / ".local" / "bin" / "kim"
+                else:
+                    kim_path = Path.home() / ".local" / "bin" / "kim"
                 kim_path.parent.mkdir(parents=True, exist_ok=True)
 
             tmp_path = kim_path.with_suffix(".new")
@@ -1137,8 +1562,15 @@ def cmd_selfupdate(args):
             print(f"Downloading {asset_url}...")
             urllib.request.urlretrieve(asset_url, tmp_path)
 
-            os.chmod(tmp_path, 0o755)
-            tmp_path.replace(kim_path)
+            if platform.system() != "Windows":
+                os.chmod(tmp_path, 0o755)
+            try:
+                tmp_path.replace(kim_path)
+            except PermissionError:
+                print(f"Could not replace binary (file in use).")
+                print(f"New version at: {tmp_path}")
+                print(f"Manually replace: {kim_path}")
+                return
 
             print(f"\n✓ Updated to version {latest_version}")
             print("Run 'kim --version' to verify.")
@@ -1187,12 +1619,43 @@ def cmd_uninstall(args):
         )
         print("Removed scheduled task.")
 
-    for path in [KIM_DIR, Path.home() / ".local/bin/kim"]:
+    # Release the log file handle before wiping KIM_DIR.
+    # On Windows, open file handles prevent deletion (WinError 32).
+    # logging.shutdown() flushes and closes every handler registered
+    # with the root logger, including the FileHandler on kim.log.
+    logging.shutdown()
+
+    # Collect binary locations to clean up beyond KIM_DIR
+    _system = platform.system()
+    binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
+    if _system == "Darwin":
+        binary_candidates += [
+            Path("/usr/local/bin/kim"),
+            Path("/opt/homebrew/bin/kim"),
+        ]
+    elif _system == "Windows":
+        binary_candidates += [
+            Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
+        ]
+    # Also add whatever shutil.which finds (covers pip entry-point wrappers)
+    _which = shutil.which("kim")
+    if _which:
+        binary_candidates.append(Path(_which).resolve())
+    for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):  # dedup
         if path.exists():
             if path.is_dir():
-                shutil.rmtree(path)
+                try:
+                    shutil.rmtree(path)
+                except PermissionError as e:
+                    print(f"Could not remove {path}: {e}")
+                    print("  Close any programs using files in that folder, then delete it manually.")
+                    continue
             else:
-                path.unlink()
+                try:
+                    path.unlink()
+                except PermissionError as e:
+                    print(f"Could not remove {path}: {e}")
+                    continue
             print(f"Removed {path}")
 
     print("\n✓ kim has been uninstalled.")
@@ -1221,7 +1684,7 @@ def cmd_export(args):
         output = json.dumps(config, indent=2)
 
     if args.output:
-        Path(args.output).write_text(output)
+        Path(args.output).write_text(output, encoding='utf-8')
         print(f"Exported to {args.output}")
     else:
         print(output)
@@ -1234,7 +1697,7 @@ def cmd_import(args):
         sys.exit(1)
 
     try:
-        content = path.read_text()
+        content = path.read_text(encoding='utf-8')
 
         if args.format == "auto":
             fmt = "csv" if path.suffix == ".csv" else "json"
@@ -1242,7 +1705,7 @@ def cmd_import(args):
             fmt = args.format
 
         if fmt == "csv":
-            lines = content.strip().split("\n")
+            lines = content.strip().splitlines()
             if len(lines) < 2:
                 print("Invalid CSV format.")
                 sys.exit(1)
@@ -1353,7 +1816,7 @@ _kim_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack completion"
+    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion"
 
     case "${prev}" in
         kim)
@@ -1395,6 +1858,7 @@ _kim() {
         "import:Import reminders from file"
         "validate:Validate config file"
         "slack:Slack notification settings"
+        "sound:Manage the notification sound file"
         "completion:Generate shell completions"
     )
     if (( CURRENT == 2 )); then
@@ -1405,7 +1869,7 @@ _kim "$@"
 """
 
 FISH_COMPLETION = """#!/usr/bin/env fish
-complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack completion"
+complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion"
 """
 
 
@@ -1418,6 +1882,7 @@ def cmd_completion(args):
         print(FISH_COMPLETION)
 
 def main():
+    _enable_windows_ansi()  # enable ANSI colour codes on Windows for all commands
     parser = argparse.ArgumentParser(
         prog="kim",
         description="keep in mind — lightweight reminder daemon",
@@ -1442,6 +1907,7 @@ commands:
   export      Export reminders to file
   import      Import reminders from file
   validate    Validate config file
+  sound       Manage the notification sound file
   completion  Generate shell completions
 
 Short flags:
@@ -1496,7 +1962,7 @@ logs:   ~/.kim/kim.log
     fire_p = sub.add_parser("_remind-fire")
     fire_p.add_argument("--message", required=True)
     fire_p.add_argument("--title", default="⏰ Reminder")
-    fire_p.add_argument("--seconds", type=int, required=True)
+    fire_p.add_argument("--seconds", type=float, required=True)
 
     sub.add_parser("interactive", help="Enter interactive mode").add_argument(
         "-i", action="store_true", dest="interactive_alias"
@@ -1522,6 +1988,13 @@ logs:   ~/.kim/kim.log
     slack_p.add_argument("--test", action="store_true", help="Send test notification")
     slack_p.add_argument("-t", "--title", help="Test notification title")
     slack_p.add_argument("-m", "--message", help="Test notification message")
+
+    sound_p = sub.add_parser("sound", help="Manage the notification sound file")
+    sound_p.add_argument("--set", metavar="FILE", help="Set a custom sound file (wav/mp3/ogg/flac/aiff/m4a)")
+    sound_p.add_argument("--clear", action="store_true", help="Remove custom sound and revert to system default")
+    sound_p.add_argument("--test", action="store_true", help="Play the current sound immediately")
+    sound_p.add_argument("--enable", action="store_true", help="Enable sound notifications")
+    sound_p.add_argument("--disable", action="store_true", help="Disable sound notifications")
 
     comp_p = sub.add_parser("completion", help="Generate shell completions")
     comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
@@ -1552,6 +2025,7 @@ logs:   ~/.kim/kim.log
         "import": cmd_import,
         "validate": cmd_validate,
         "slack": cmd_slack,
+        "sound": cmd_sound,
         "completion": cmd_completion,
     }
 
