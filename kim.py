@@ -41,7 +41,7 @@ LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
 KIM_DIR.mkdir(exist_ok=True)
 
-VERSION = "2.1.0"
+VERSION = "2.0.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -49,7 +49,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    encoding="utf-8",
 )
 log = logging.getLogger("kim")
 
@@ -248,10 +247,8 @@ def _notify_linux(title, message, urgency, sound, sound_file=None):
 
 
 def _notify_mac(title, message, urgency, sound, sound_file=None):
-    # Escape for AppleScript string literals: backslash first, then double-quote
-    def _as(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').replace('\r', '')
-    t = _as(title)
-    m = _as(message)
+    t = title.replace('"', '\\"')
+    m = message.replace('"', '\\"').replace("\n", " ")
 
     if sound and sound_file:
         # Show toast without built-in sound; play custom file separately via afplay
@@ -565,15 +562,15 @@ class KimScheduler:
 
 def load_config() -> dict:
     if not CONFIG.exists():
-        CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding='utf-8')
+        CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2))
         print(f"Created default config: {CONFIG}")
-    with open(CONFIG, encoding='utf-8') as f:
+    with open(CONFIG) as f:
         return json.load(f)
 
 
 def cmd_start(args):
     if PID_FILE.exists():
-        pid = PID_FILE.read_text(encoding='utf-8').strip()
+        pid = PID_FILE.read_text().strip()
         print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
         sys.exit(1)
 
@@ -595,7 +592,7 @@ def cmd_start(args):
             print("  Falling back to system default sound.")
             sound_file = None
 
-    PID_FILE.write_text(str(os.getpid()), encoding='utf-8')
+    PID_FILE.write_text(str(os.getpid()))
 
     print(f"kim v{VERSION} \u2014 {len(active)} reminder(s) active")
     for r in active:
@@ -693,7 +690,7 @@ def cmd_stop(args):
     if not PID_FILE.exists():
         print("kim is not running.")
         sys.exit(0)
-    pid = int(PID_FILE.read_text(encoding='utf-8').strip())
+    pid = int(PID_FILE.read_text().strip())
     try:
         _terminate_process(pid)
         # On Windows the process is killed before its cleanup handler runs,
@@ -710,45 +707,14 @@ def cmd_stop(args):
         print(f"Failed to stop kim: {e}")
 
 
-def _is_process_running(pid: int) -> bool:
-    """
-    Cross-platform process-existence check.
-    Uses signal 0 on Unix (doesn't kill, just probes).
-    Uses tasklist on Windows.
-    Returns False for any error, including permission errors — caller
-    should treat an unverifiable PID as potentially stale.
-    """
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True, text=True,
-            )
-            return str(pid) in result.stdout
-        else:
-            os.kill(pid, 0)   # signal 0 = existence check only
-            return True
-    except (ProcessLookupError, PermissionError, OSError):
-        return False
-
-
 def cmd_status(args):
     config = load_config()
     active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
     paused = [r for r in config.get("reminders", []) if not r.get("enabled", True)]
 
     if PID_FILE.exists():
-        pid_str = PID_FILE.read_text(encoding='utf-8').strip()
-        try:
-            pid = int(pid_str)
-            if _is_process_running(pid):
-                print(f"● kim running   PID {pid}")
-            else:
-                PID_FILE.unlink(missing_ok=True)
-                print("○ kim stopped  (removed stale PID file)")
-        except ValueError:
-            PID_FILE.unlink(missing_ok=True)
-            print("○ kim stopped  (removed invalid PID file)")
+        pid = PID_FILE.read_text().strip()
+        print(f"● kim running   PID {pid}")
     else:
         print("○ kim stopped")
 
@@ -887,20 +853,15 @@ def cmd_logs(args):
     if not LOG_FILE.exists():
         print("No log file yet.")
         return
-    lines = LOG_FILE.read_text(encoding='utf-8').splitlines()
+    lines = LOG_FILE.read_text().splitlines()
     for line in lines[-n:]:
         print(line)
 
 
 def cmd_edit(args):
+    editor = os.environ.get("EDITOR", "nano")
     load_config()  # ensure config exists
-    if platform.system() == "Windows":
-        # os.execvp is POSIX-only; notepad is always available on Windows
-        editor = os.environ.get("EDITOR", "notepad")
-        subprocess.run([editor, str(CONFIG)])
-    else:
-        editor = os.environ.get("EDITOR", "nano")
-        os.execvp(editor, [editor, str(CONFIG)])
+    os.execvp(editor, [editor, str(CONFIG)])
 
 
 def cmd_add(args):
@@ -924,7 +885,7 @@ def cmd_add(args):
 
     config.setdefault("reminders", []).append(new_reminder)
 
-    with open(CONFIG, "w", encoding="utf-8") as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Added reminder '{name}' (every {interval_str})")
@@ -943,7 +904,7 @@ def cmd_remove(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w", encoding="utf-8") as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Removed reminder '{name}'")
@@ -965,7 +926,7 @@ def cmd_enable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w", encoding="utf-8") as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Enabled reminder '{name}'")
@@ -987,7 +948,7 @@ def cmd_disable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w", encoding="utf-8") as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Disabled reminder '{name}'")
@@ -1020,7 +981,7 @@ def cmd_update(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    with open(CONFIG, "w", encoding="utf-8") as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f, indent=2)
 
     print(f"✓ Updated reminder '{name}'")
@@ -1216,6 +1177,7 @@ def get_screen_size():
 
 
 def cmd_interactive(args):
+    _enable_windows_ansi()   # no-op on Linux/macOS
     config = load_config()
 
     def clear_screen():
@@ -1547,14 +1509,7 @@ def cmd_selfupdate(args):
             if kim_in_path:
                 kim_path = Path(kim_in_path).resolve()
             else:
-                if platform.system() == "Windows":
-                    kim_path = Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe"
-                elif platform.system() == "Darwin":
-                    # Prefer Homebrew prefix if available, otherwise ~/.local/bin
-                    brew_bin = Path("/opt/homebrew/bin/kim")
-                    kim_path = brew_bin if brew_bin.parent.exists() else Path.home() / ".local" / "bin" / "kim"
-                else:
-                    kim_path = Path.home() / ".local" / "bin" / "kim"
+                kim_path = Path.home() / ".local" / "bin" / "kim"
                 kim_path.parent.mkdir(parents=True, exist_ok=True)
 
             tmp_path = kim_path.with_suffix(".new")
@@ -1562,15 +1517,8 @@ def cmd_selfupdate(args):
             print(f"Downloading {asset_url}...")
             urllib.request.urlretrieve(asset_url, tmp_path)
 
-            if platform.system() != "Windows":
-                os.chmod(tmp_path, 0o755)
-            try:
-                tmp_path.replace(kim_path)
-            except PermissionError:
-                print(f"Could not replace binary (file in use).")
-                print(f"New version at: {tmp_path}")
-                print(f"Manually replace: {kim_path}")
-                return
+            os.chmod(tmp_path, 0o755)
+            tmp_path.replace(kim_path)
 
             print(f"\n✓ Updated to version {latest_version}")
             print("Run 'kim --version' to verify.")
@@ -1619,43 +1567,12 @@ def cmd_uninstall(args):
         )
         print("Removed scheduled task.")
 
-    # Release the log file handle before wiping KIM_DIR.
-    # On Windows, open file handles prevent deletion (WinError 32).
-    # logging.shutdown() flushes and closes every handler registered
-    # with the root logger, including the FileHandler on kim.log.
-    logging.shutdown()
-
-    # Collect binary locations to clean up beyond KIM_DIR
-    _system = platform.system()
-    binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
-    if _system == "Darwin":
-        binary_candidates += [
-            Path("/usr/local/bin/kim"),
-            Path("/opt/homebrew/bin/kim"),
-        ]
-    elif _system == "Windows":
-        binary_candidates += [
-            Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
-        ]
-    # Also add whatever shutil.which finds (covers pip entry-point wrappers)
-    _which = shutil.which("kim")
-    if _which:
-        binary_candidates.append(Path(_which).resolve())
-    for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):  # dedup
+    for path in [KIM_DIR, Path.home() / ".local/bin/kim"]:
         if path.exists():
             if path.is_dir():
-                try:
-                    shutil.rmtree(path)
-                except PermissionError as e:
-                    print(f"Could not remove {path}: {e}")
-                    print("  Close any programs using files in that folder, then delete it manually.")
-                    continue
+                shutil.rmtree(path)
             else:
-                try:
-                    path.unlink()
-                except PermissionError as e:
-                    print(f"Could not remove {path}: {e}")
-                    continue
+                path.unlink()
             print(f"Removed {path}")
 
     print("\n✓ kim has been uninstalled.")
@@ -1684,7 +1601,7 @@ def cmd_export(args):
         output = json.dumps(config, indent=2)
 
     if args.output:
-        Path(args.output).write_text(output, encoding='utf-8')
+        Path(args.output).write_text(output)
         print(f"Exported to {args.output}")
     else:
         print(output)
@@ -1697,7 +1614,7 @@ def cmd_import(args):
         sys.exit(1)
 
     try:
-        content = path.read_text(encoding='utf-8')
+        content = path.read_text()
 
         if args.format == "auto":
             fmt = "csv" if path.suffix == ".csv" else "json"
@@ -1705,7 +1622,7 @@ def cmd_import(args):
             fmt = args.format
 
         if fmt == "csv":
-            lines = content.strip().splitlines()
+            lines = content.strip().split("\n")
             if len(lines) < 2:
                 print("Invalid CSV format.")
                 sys.exit(1)
@@ -1882,7 +1799,6 @@ def cmd_completion(args):
         print(FISH_COMPLETION)
 
 def main():
-    _enable_windows_ansi()  # enable ANSI colour codes on Windows for all commands
     parser = argparse.ArgumentParser(
         prog="kim",
         description="keep in mind — lightweight reminder daemon",
@@ -2036,4 +1952,4 @@ logs:   ~/.kim/kim.log
 
 
 if __name__ == "__main__":
-    main()
+    main()  
