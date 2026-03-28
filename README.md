@@ -3,6 +3,8 @@
 > Lightweight cross-platform reminder daemon for developers.  
 > No UI. Config-driven. Runs in the background.
 
+**Documentation:** [https://pratikwayal01.github.io/kim/](https://pratikwayal01.github.io/kim/)
+
 ---
 
 ## Install
