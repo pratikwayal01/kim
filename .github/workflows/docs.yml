@@ -39,3 +39,8 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           enablement: true
+      
+      - name: Display deployment URL
+        run: |
+          echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "Site should be available at: https://pratikwayal01.github.io/kim/"
