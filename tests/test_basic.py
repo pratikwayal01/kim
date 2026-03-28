@@ -8,6 +8,7 @@ import platform
 import tempfile
 import sys
 import unittest
+from pathlib import Path
 
 # Add parent directory to path to import kim
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -42,8 +43,11 @@ class TestCore(unittest.TestCase):
         self.assertEqual(parse_interval("1d"), 86400)
         # seconds
         self.assertEqual(parse_interval("60s"), 60)
-        # invalid defaults to 30 minutes
-        self.assertEqual(parse_interval("invalid"), 1800)
+        # invalid raises ValueError
+        with self.assertRaises(ValueError):
+            parse_interval("invalid")
+        # plain number string (minutes)
+        self.assertEqual(parse_interval("45"), 2700)
 
     def test_load_config_creates_default(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -53,12 +57,12 @@ class TestCore(unittest.TestCase):
             original_config = kim.core.CONFIG
             original_log = kim.core.LOG_FILE
             try:
-                kim.core.CONFIG = os.path.join(tmpdir, "config.json")
-                kim.core.LOG_FILE = os.path.join(tmpdir, "kim.log")
+                kim.core.CONFIG = Path(tmpdir) / "config.json"
+                kim.core.LOG_FILE = Path(tmpdir) / "kim.log"
                 config = load_config()
                 self.assertIn("reminders", config)
                 self.assertEqual(len(config["reminders"]), 2)
-                self.assertTrue(os.path.exists(kim.core.CONFIG))
+                self.assertTrue(kim.core.CONFIG.exists())
             finally:
                 kim.core.CONFIG = original_config
                 kim.core.LOG_FILE = original_log
@@ -109,10 +113,12 @@ class TestSound(unittest.TestCase):
         # Invalid extension
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
             f.write(b"test")
-            ok, err = validate_sound_file(f.name)
-            self.assertFalse(ok)
-            self.assertIn("Unrecognised extension", err)
-            os.unlink(f.name)
+            fname = f.name
+        # file is closed now
+        ok, err = validate_sound_file(fname)
+        self.assertFalse(ok)
+        self.assertIn("Unrecognised extension", err)
+        os.unlink(fname)
 
 
 if __name__ == "__main__":
