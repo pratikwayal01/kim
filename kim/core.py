@@ -14,7 +14,7 @@ LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
 KIM_DIR.mkdir(exist_ok=True)
 
-VERSION = "2.1.0"
+VERSION = "3.0.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
