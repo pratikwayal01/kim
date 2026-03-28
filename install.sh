@@ -73,7 +73,7 @@ if [[ "$OS" == "Linux" ]] && ! command -v notify-send &>/dev/null; then
     _ok "libnotify installed"
 fi
 
-# ── Download kim.py ───────────────────────────────────────────────────────────
+# ── Download kim package and wrapper ──────────────────────────────────────────
 _header "Installing kim"
 mkdir -p "$BIN_DIR" "$KIM_DIR"
 
@@ -81,11 +81,30 @@ if [[ "${KIM_LOCAL:-0}" == "1" ]]; then
     # Local mode: used when running from cloned repo
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cp "$SCRIPT_DIR/kim.py" "$KIM_DIR/kim.py"
-    _ok "Copied kim.py from local source"
+    cp -r "$SCRIPT_DIR/kim" "$KIM_DIR/kim"
+    _ok "Copied kim package from local source"
 else
-    _info "Downloading kim.py..."
-    curl -fsSL "$REPO/kim.py" -o "$KIM_DIR/kim.py"
-    _ok "Downloaded kim.py"
+    _info "Downloading kim package..."
+    ZIP_URL="https://github.com/pratikwayal01/kim/archive/refs/heads/main.zip"
+    ZIP_PATH="/tmp/kim-main.zip"
+    EXTRACT_PATH="/tmp/kim-main"
+    
+    curl -fsSL "$ZIP_URL" -o "$ZIP_PATH"
+    _ok "Downloaded package"
+    
+    # Remove previous extraction if exists
+    rm -rf "$EXTRACT_PATH"
+    unzip -q "$ZIP_PATH" -d "$EXTRACT_PATH"
+    _ok "Extracted package"
+    
+    # Copy kim.py and kim/ folder to install directory
+    cp "$EXTRACT_PATH/kim-main/kim.py" "$KIM_DIR/kim.py"
+    cp -r "$EXTRACT_PATH/kim-main/kim" "$KIM_DIR/kim"
+    _ok "Installed to $KIM_DIR"
+    
+    # Cleanup
+    rm -f "$ZIP_PATH"
+    rm -rf "$EXTRACT_PATH"
 fi
 
 chmod +x "$KIM_DIR/kim.py"

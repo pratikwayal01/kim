@@ -48,19 +48,40 @@ if (-not $PythonCmd) {
     }
 }
 
-# ── Download kim.py ───────────────────────────────────────────────────────────
+# ── Download kim package and wrapper ──────────────────────────────────────────
 Hdr "Installing kim"
 New-Item -ItemType Directory -Force -Path $KimDir, $BinDir | Out-Null
 
 $local = $env:KIM_LOCAL -eq "1"
 if ($local) {
-    $src = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "kim.py"
-    Copy-Item $src -Destination $KimPy -Force
-    Ok "Copied kim.py from local source"
+    # Copy from local source (for development)
+    $srcDir = Split-Path $MyInvocation.MyCommand.Path
+    Copy-Item "$srcDir\kim.py" -Destination $KimDir -Force
+    Copy-Item "$srcDir\kim" -Destination $KimDir -Recurse -Force
+    Ok "Copied kim package from local source"
 } else {
-    Info "Downloading kim.py..."
-    Invoke-WebRequest "$REPO/kim.py" -OutFile $KimPy
-    Ok "Downloaded kim.py"
+    Info "Downloading kim package..."
+    $zipUrl = "https://github.com/pratikwayal01/kim/archive/refs/heads/main.zip"
+    $zipPath = "$env:TEMP\kim-main.zip"
+    $extractPath = "$env:TEMP\kim-main"
+    
+    # Download zip
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+    Ok "Downloaded package"
+    
+    # Extract zip
+    if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force }
+    Expand-Archive -Path $zipPath -DestinationPath $extractPath
+    Ok "Extracted package"
+    
+    # Copy kim.py and kim/ folder to install directory
+    Copy-Item "$extractPath\kim-main\kim.py" -Destination $KimDir -Force
+    Copy-Item "$extractPath\kim-main\kim" -Destination $KimDir -Recurse -Force
+    Ok "Installed to $KimDir"
+    
+    # Cleanup
+    Remove-Item $zipPath -Force
+    Remove-Item $extractPath -Recurse -Force
 }
 
 # ── Create kim.bat shim ───────────────────────────────────────────────────────
