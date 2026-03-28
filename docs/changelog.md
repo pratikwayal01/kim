@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation website (MkDocs Material theme)
 - Comprehensive test suite with CI on Windows, macOS, Linux
 - Updated installers to download entire package
+- Case-insensitive commands and flags (e.g., `STATUS`, `StAtUs`)
+- `-v`/`-V`/`--VERSION`/`--HELP` aliases for version and help
 
 ### Changed
 - Refactored monolithic `kim.py` into focused modules
