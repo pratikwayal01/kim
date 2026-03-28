@@ -28,24 +28,22 @@ import tracemalloc
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-# ── optional KimScheduler (from patched kim.py) ───────────────────────────────
+# ── optional KimScheduler (from kim.scheduler) ───────────────────────────────
 try:
-    import importlib.util, sys as _sys
-    _spec = importlib.util.spec_from_file_location(
-        "kim", os.path.join(os.path.dirname(__file__), "kim.py")
-    )
-    _kim = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_kim)
-    KimScheduler = _kim.KimScheduler
+    from kim.scheduler import KimScheduler
+
     _HAS_KIM = True
 except Exception as _e:
     _HAS_KIM = False
     KimScheduler = None
-    print(f"[warn] kim.py not found — scheduler comparison test will be skipped ({_e})\n")
+    print(
+        f"[warn] kim.scheduler not found — scheduler comparison test will be skipped ({_e})\n"
+    )
 
 # ── optional psutil ────────────────────────────────────────────────────────────
 try:
     import psutil
+
     _HAS_PSUTIL = True
 except ImportError:
     _HAS_PSUTIL = False
@@ -56,6 +54,35 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════════════════════
+import platform
+
+HLINE = "-" if platform.system() == "Windows" else "─"
+DOUBLE_LINE = "=" if platform.system() == "Windows" else "═"
+EM_DASH = "--" if platform.system() == "Windows" else "—"
+
+
+def ascii_table_line(line):
+    """Replace box drawing characters with ASCII equivalents."""
+    replacements = {
+        "─": "-",
+        "│": "|",
+        "┌": "+",
+        "┐": "+",
+        "└": "+",
+        "┘": "+",
+        "├": "+",
+        "┤": "+",
+        "┬": "+",
+        "┴": "+",
+        "┼": "+",
+    }
+    for k, v in replacements.items():
+        line = line.replace(k, v)
+    return line
+
+
+TABLE_LINE = ascii_table_line if platform.system() == "Windows" else lambda x: x
+
 
 def rss_mb() -> Optional[float]:
     """Current process RSS in MB (requires psutil)."""
@@ -72,7 +99,7 @@ def fmt_mb(value: Optional[float]) -> str:
 class MemSample:
     label: str
     rss_before: Optional[float]
-    rss_after:  Optional[float]
+    rss_after: Optional[float]
     tracemalloc_peak_kb: float
     tracemalloc_current_kb: float
     duration_s: float
@@ -85,10 +112,35 @@ class MemSample:
         return None
 
     def report(self) -> str:
+        import platform
+
+        if platform.system() == "Windows":
+            # Replace problematic Unicode characters with ASCII equivalents
+            mapping = {
+                "─": "-",
+                "✓": "OK",
+                "✗": "ERROR",
+                "·": ".",
+                "●": "*",
+                "○": "o",
+                "⚠": "!",
+                "━": "-",
+                "►": ">",
+            }
+
+            def replace_chars(s):
+                for k, v in mapping.items():
+                    s = s.replace(k, v)
+                return s
+        else:
+
+            def replace_chars(s):
+                return s
+
         lines = [
-            f"\n{'─'*60}",
+            f"\n{'─' * 60}",
             f"  {self.label}",
-            f"{'─'*60}",
+            f"{'─' * 60}",
             f"  RSS before     : {fmt_mb(self.rss_before)}",
             f"  RSS after      : {fmt_mb(self.rss_after)}",
             f"  RSS delta      : {fmt_mb(self.rss_delta)}",
@@ -98,6 +150,9 @@ class MemSample:
         ]
         for k, v in self.extras.items():
             lines.append(f"  {k:<15}: {v}")
+        # Apply replacements only on Windows
+        if platform.system() == "Windows":
+            lines = [replace_chars(line) for line in lines]
         return "\n".join(lines)
 
 
@@ -130,6 +185,7 @@ def measure(label: str, fn, *args, **kwargs) -> MemSample:
 # KIM-replica helpers  (mirrors kim.py patterns without importing it)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def make_reminder(index: int, msg_len: int = 60) -> dict:
     """Produce a reminder dict that looks exactly like KIM's config schema."""
     return {
@@ -138,7 +194,7 @@ def make_reminder(index: int, msg_len: int = 60) -> dict:
         "title": f"Reminder #{index}",
         "message": "x" * msg_len,
         "urgency": ["low", "normal", "critical"][index % 3],
-        "enabled": index % 7 != 0,          # ~14 % disabled
+        "enabled": index % 7 != 0,  # ~14 % disabled
     }
 
 
@@ -170,8 +226,10 @@ def load_config_file(path: str) -> dict:
 
 # ── Thread replica ─────────────────────────────────────────────────────────────
 
+
 class ReminderThread(threading.Thread):
     """Mimics KIM's per-reminder daemon thread (sleeps, never fires for tests)."""
+
     def __init__(self, reminder: dict):
         super().__init__(daemon=True)
         self.reminder = reminder
@@ -180,7 +238,7 @@ class ReminderThread(threading.Thread):
     def run(self):
         interval = self.reminder["interval_minutes"] * 60
         while not self._stop_event.wait(timeout=interval):
-            pass   # would send notification here
+            pass  # would send notification here
 
     def stop(self):
         self._stop_event.set()
@@ -193,6 +251,7 @@ class ReminderThread(threading.Thread):
 results: List[MemSample] = []
 
 # ── Test 1: Config object construction at scale ────────────────────────────────
+
 
 def test_config_construction_scale():
     print("\n[TEST 1] Config object construction at scale")
@@ -208,6 +267,7 @@ def test_config_construction_scale():
 
 
 # ── Test 2: Config JSON serialise / deserialise ────────────────────────────────
+
 
 def test_config_json_io():
     print("\n[TEST 2] Config JSON round-trip (write + read from disk)")
@@ -230,6 +290,7 @@ def test_config_json_io():
 
 
 # ── Test 3: OLD vs NEW scheduler head-to-head ─────────────────────────────────
+
 
 def test_thread_overhead():
     """
@@ -326,14 +387,18 @@ def test_thread_overhead():
         gc.collect()
 
     # ── Print comparison table ─────────────────────────────────────────────
-    print("\n  ┌─────────────────────────────────────────────────────────┐")
-    print("  │  HEAD-TO-HEAD SUMMARY (RSS delta)                       │")
-    print("  ├──────────┬──────────────┬──────────────┬────────────────┤")
-    print("  │ Reminders│ OLD (threads)│ NEW (heapq)  │ Savings        │")
-    print("  ├──────────┼──────────────┼──────────────┼────────────────┤")
+    print(TABLE_LINE("\n  ┌─────────────────────────────────────────────────────────┐"))
+    print(TABLE_LINE("  │  HEAD-TO-HEAD SUMMARY (RSS delta)                       │"))
+    print(TABLE_LINE("  ├──────────┬──────────────┬──────────────┬────────────────┤"))
+    print(TABLE_LINE("  │ Reminders│ OLD (threads)│ NEW (heapq)  │ Savings        │"))
+    print(TABLE_LINE("  ├──────────┼──────────────┼──────────────┼────────────────┤"))
 
-    old_results = {s.extras["n_reminders"]: s for s in results if s.label.startswith("[OLD]")}
-    new_results = {s.extras["n_reminders"]: s for s in results if s.label.startswith("[NEW]")}
+    old_results = {
+        s.extras["n_reminders"]: s for s in results if s.label.startswith("[OLD]")
+    }
+    new_results = {
+        s.extras["n_reminders"]: s for s in results if s.label.startswith("[NEW]")
+    }
 
     for n in thread_counts:
         old = old_results.get(n)
@@ -347,10 +412,11 @@ def test_thread_overhead():
             sav_str = "N/A"
         print(f"  │ {n:<8} │ {old_str:>12} │ {new_str:>12} │ {sav_str:<14} │")
 
-    print("  └──────────┴──────────────┴──────────────┴────────────────┘")
+    print(TABLE_LINE("  └──────────┴──────────────┴──────────────┴────────────────┘"))
 
 
 # ── Test 4: Memory leak detection — repeated parse cycles ─────────────────────
+
 
 def test_memory_leak_detection():
     """
@@ -366,14 +432,14 @@ def test_memory_leak_detection():
     gc.collect()
     for i in range(CYCLES):
         enabled = parse_config(cfg)
-        _ = [r["name"] for r in enabled]   # simulate processing
+        _ = [r["name"] for r in enabled]  # simulate processing
         del enabled
         if i % 25 == 0:
             gc.collect()
             rss_snapshots.append((i, rss_mb()))
 
     rss_first = rss_snapshots[0][1]
-    rss_last  = rss_snapshots[-1][1]
+    rss_last = rss_snapshots[-1][1]
 
     if rss_first is not None and rss_last is not None:
         drift = rss_last - rss_first
@@ -385,7 +451,7 @@ def test_memory_leak_detection():
     print(f"\n  Cycles run       : {CYCLES}")
     print(f"  Reminder count   : {N}")
     print(f"  RSS at cycle 0   : {fmt_mb(rss_first)}")
-    print(f"  RSS at cycle {CYCLES-1:>3}  : {fmt_mb(rss_last)}")
+    print(f"  RSS at cycle {CYCLES - 1:>3}  : {fmt_mb(rss_last)}")
     print(f"  RSS drift        : {fmt_mb(drift)}")
     print(f"  Verdict          : {verdict}")
 
@@ -398,6 +464,7 @@ def test_memory_leak_detection():
 
 # ── Test 5: Large message payloads ────────────────────────────────────────────
 
+
 def test_large_payload():
     """
     Simulates reminders with very long message strings (e.g. templated content).
@@ -409,8 +476,7 @@ def test_large_payload():
 
     for msg_len in msg_sizes:
         sample, cfg = measure(
-            f"{N} reminders × {msg_len}-char message",
-            build_config, N, msg_len
+            f"{N} reminders × {msg_len}-char message", build_config, N, msg_len
         )
         total_payload_kb = (N * msg_len) / 1024
         sample.extras["total_payload"] = f"{total_payload_kb:.1f} KB"
@@ -422,6 +488,7 @@ def test_large_payload():
 
 
 # ── Test 6: Concurrent config access ──────────────────────────────────────────
+
 
 def test_concurrent_config_access():
     """
@@ -477,16 +544,17 @@ def test_concurrent_config_access():
 # Summary
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def print_summary():
-    print("\n" + "═" * 60)
+    print("\n" + DOUBLE_LINE * 60)
     print("  MEMORY TEST SUMMARY")
-    print("═" * 60)
+    print(DOUBLE_LINE * 60)
     print(f"  {'Test':<42} {'RSS Δ':>10}  {'TM Peak':>10}")
-    print(f"  {'─'*42} {'─'*10}  {'─'*10}")
+    print(f"  {HLINE * 42} {HLINE * 10}  {HLINE * 10}")
     for s in results:
         rss_str = fmt_mb(s.rss_delta) if s.rss_delta is not None else "N/A"
         print(f"  {s.label:<42} {rss_str:>10}  {s.tracemalloc_peak_kb:>7.1f} KB")
-    print("═" * 60)
+    print(DOUBLE_LINE * 60)
 
     if not _HAS_PSUTIL:
         print("\n  💡 Install psutil for RSS-level measurements:")
@@ -499,7 +567,7 @@ def print_summary():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  KIM — Memory Scale Tests")
+    print(f"  KIM {EM_DASH} Memory Scale Tests")
     print(f"  Python {sys.version.split()[0]}  |  psutil: {_HAS_PSUTIL}")
     print("=" * 60)
 

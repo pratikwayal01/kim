@@ -1,0 +1,228 @@
+"""
+Daemon management commands: start, stop, status.
+"""
+
+import json
+import os
+import platform
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from ..core import CONFIG, PID_FILE, VERSION, load_config, log
+from ..notifications import notify
+from ..sound import validate_sound_file
+from ..scheduler import KimScheduler
+
+from ..utils import BULLET, EM_DASH, WARNING, CIRCLE_OPEN, CIRCLE_FILLED, CHECK
+
+
+def cmd_start(args):
+    if PID_FILE.exists():
+        pid = PID_FILE.read_text(encoding="utf-8").strip()
+        print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
+        sys.exit(1)
+
+    config = load_config()
+    sound = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
+    slack_config = config.get("slack", {})
+    active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
+
+    if not active:
+        print("No enabled reminders in config. Edit ~/.kim/config.json")
+        sys.exit(0)
+
+    # Validate sound_file at startup so users get an early warning
+    if sound and sound_file:
+        ok, err = validate_sound_file(sound_file)
+        if not ok:
+            print(f"{WARNING} Warning: sound_file problem {EM_DASH} {err}")
+            print("  Falling back to system default sound.")
+            sound_file = None
+
+    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+
+    print(f"kim v{VERSION} {EM_DASH} {len(active)} reminder(s) active")
+    for r in active:
+        interval = r.get("interval_minutes", 30)
+        interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
+        print(f"  {BULLET} {r['name']:<20} every {interval_str}")
+    if sound_file:
+        print(f"  Sound: {sound_file}")
+    print(f"Log: {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}")
+
+    log.info(f"kim v{VERSION} started {EM_DASH} PID {os.getpid()}")
+
+    # ── Build a notifier that uses KIM's existing notify() with sound + slack ──
+    _slack = slack_config if slack_config.get("enabled") else None
+
+    def kim_notifier(reminder: dict) -> None:
+        notify(
+            title=reminder.get("title", "Reminder"),
+            message=reminder.get("message", ""),
+            urgency=reminder.get("urgency", "normal"),
+            sound=sound,
+            sound_file=sound_file,
+            slack_config=_slack,
+        )
+        log.info(f"[{reminder.get('name')}] fired")
+
+    # ── Start heapq scheduler (replaces per-reminder threads) ─────────────────
+    scheduler = KimScheduler(config, kim_notifier)
+
+    def shutdown(sig, frame):
+        log.info("Shutting down...")
+        scheduler.stop()
+        PID_FILE.unlink(missing_ok=True)
+        sys.exit(0)
+
+    # SIGTERM can be delivered on Unix; on Windows it cannot be sent from
+    # another process (os.kill raises WinError 87), so only register it
+    # where it actually works.  SIGINT (Ctrl-C) works on both platforms.
+    if platform.system() != "Windows":
+        signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    notify(
+        "✅ kim started",
+        f"{len(active)} reminder(s): " + ", ".join(r["name"] for r in active),
+        urgency="low",
+        sound=False,
+        slack_config=_slack,
+    )
+
+    scheduler.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        shutdown(None, None)
+
+
+def _terminate_process(pid: int) -> None:
+    """
+    Terminate a process by PID in a cross-platform way.
+
+    - Unix: sends SIGTERM so the shutdown handler runs gracefully.
+    - Windows: os.kill(pid, signal.SIGTERM) raises WinError 87 because SIGTERM
+      is not a real Win32 signal that can be delivered across processes.
+      Instead we use taskkill /F which forcefully terminates the process.
+      Because the process is killed before it can run cleanup code, the caller
+      is responsible for removing the PID file.
+
+    Raises:
+        ProcessLookupError  if the PID does not exist.
+        PermissionError     if the caller lacks rights to terminate the process.
+        RuntimeError        if taskkill fails for another reason (Windows only).
+    """
+    if platform.system() == "Windows":
+        result = subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return
+        stderr = result.stderr.lower()
+        if "not found" in stderr or "no running instance" in stderr:
+            raise ProcessLookupError(f"No process with PID {pid}")
+        if "access is denied" in stderr:
+            raise PermissionError(f"Access denied for PID {pid}")
+        raise RuntimeError(f"taskkill failed: {result.stderr.strip()}")
+    else:
+        os.kill(pid, signal.SIGTERM)
+
+
+def cmd_stop(args):
+    if not PID_FILE.exists():
+        print("kim is not running.")
+        sys.exit(0)
+    pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+    try:
+        _terminate_process(pid)
+        # On Windows the process is killed before its cleanup handler runs,
+        # so we always remove the PID file here on all platforms.
+        PID_FILE.unlink(missing_ok=True)
+        print(f"kim stopped (PID {pid}).")
+        log.info(f"Stopped by user (PID {pid})")
+    except ProcessLookupError:
+        print("Process not found — cleaning up stale PID file.")
+        PID_FILE.unlink(missing_ok=True)
+    except PermissionError:
+        print(f"Permission denied to stop PID {pid}.")
+    except RuntimeError as e:
+        print(f"Failed to stop kim: {e}")
+
+
+def _is_process_running(pid: int) -> bool:
+    """
+    Cross-platform process-existence check.
+    Uses signal 0 on Unix (doesn't kill, just probes).
+    Uses tasklist on Windows.
+    Returns False for any error, including permission errors — caller
+    should treat an unverifiable PID as potentially stale.
+    """
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True,
+                text=True,
+            )
+            return str(pid) in result.stdout
+        else:
+            os.kill(pid, 0)  # signal 0 = existence check only
+            return True
+    except (ProcessLookupError, PermissionError, OSError):
+        return False
+
+
+def cmd_status(args):
+    config = load_config()
+    active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
+    paused = [r for r in config.get("reminders", []) if not r.get("enabled", True)]
+
+    if PID_FILE.exists():
+        pid_str = PID_FILE.read_text(encoding="utf-8").strip()
+        try:
+            pid = int(pid_str)
+            if _is_process_running(pid):
+                print(f"{CIRCLE_FILLED} kim running   PID {pid}")
+            else:
+                PID_FILE.unlink(missing_ok=True)
+                print(f"{CIRCLE_OPEN} kim stopped  (removed stale PID file)")
+        except ValueError:
+            PID_FILE.unlink(missing_ok=True)
+            print(f"{CIRCLE_OPEN} kim stopped  (removed invalid PID file)")
+    else:
+        print(f"{CIRCLE_OPEN} kim stopped")
+
+    print(f"\n  Config : {CONFIG}")
+    print(
+        f"  Log    : {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}"
+    )
+
+    sound_enabled = config.get("sound", True)
+    sound_file = config.get("sound_file") or None
+    if not sound_enabled:
+        print("  Sound  : disabled")
+    elif sound_file:
+        print(f"  Sound  : {sound_file}")
+    else:
+        print("  Sound  : system default")
+    print()
+
+    if active:
+        print("  Active reminders:")
+        for r in active:
+            print(
+                f"    {CHECK} {r['name']:<20} every {r['interval_minutes']} min  [{r.get('urgency', 'normal')}]"
+            )
+    if paused:
+        print("  Disabled reminders:")
+        for r in paused:
+            print(f"    - {r['name']}")

@@ -1,0 +1,175 @@
+"""
+Config-related commands: edit, list, logs, validate, export, import.
+"""
+
+import json
+import os
+import platform
+import subprocess
+import sys
+from pathlib import Path
+
+from ..core import CONFIG, LOG_FILE, load_config, log
+from ..utils import CHECK, MIDDOT, HLINE
+
+
+def cmd_edit(args):
+    load_config()  # ensure config exists
+    if platform.system() == "Windows":
+        # os.execvp is POSIX-only; notepad is always available on Windows
+        editor = os.environ.get("EDITOR", "notepad")
+        subprocess.run([editor, str(CONFIG)])
+    else:
+        editor = os.environ.get("EDITOR", "nano")
+        os.execvp(editor, [editor, str(CONFIG)])
+
+
+def cmd_list(args):
+    config = load_config()
+    reminders = config.get("reminders", [])
+    print(f"{'NAME':<20} {'INTERVAL':>12}   {'URGENCY':<10} {'ENABLED'}")
+    print(HLINE * 58)
+    for r in reminders:
+        enabled = CHECK if r.get("enabled", True) else MIDDOT
+        interval = r.get("interval_minutes", 30)
+        if isinstance(interval, str):
+            interval_str = interval
+        else:
+            interval_str = f"{interval} min"
+        print(
+            f"{r['name']:<20} {interval_str:>12}   {r.get('urgency', 'normal'):<10} {enabled}"
+        )
+
+
+def cmd_logs(args):
+    n = args.lines
+    if not LOG_FILE.exists():
+        print("No log file yet.")
+        return
+    lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+    for line in lines[-n:]:
+        print(line)
+
+
+def cmd_validate(args):
+    try:
+        config = load_config()
+
+        if "reminders" not in config:
+            print("Warning: No 'reminders' key found in config.")
+
+        reminders = config.get("reminders", [])
+        for r in reminders:
+            if "name" not in r:
+                print("Error: Reminder missing 'name' field.")
+                sys.exit(1)
+            if "interval_minutes" not in r:
+                print(f"Error: Reminder '{r.get('name')}' missing 'interval_minutes'.")
+                sys.exit(1)
+            interval_val = r["interval_minutes"]
+            if isinstance(interval_val, str):
+                pass
+            elif not isinstance(interval_val, int) or interval_val < 1:
+                print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
+                sys.exit(1)
+
+        print(f"{CHECK} Config is valid ({len(reminders)} reminder(s))")
+
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON: {e}")
+        sys.exit(1)
+
+
+def cmd_export(args):
+    config = load_config()
+
+    if args.format == "json":
+        output = json.dumps(config, indent=2)
+    elif args.format == "csv":
+        reminders = config.get("reminders", [])
+        if reminders:
+            lines = ["name,interval_minutes,title,message,urgency,enabled"]
+            for r in reminders:
+                name = r.get("name", "").replace(",", ";")
+                title = r.get("title", "").replace(",", ";")
+                message = r.get("message", "").replace(",", ";").replace("\n", " ")
+                line = f"{name},{r.get('interval_minutes', '')},{title},{message},{r.get('urgency', 'normal')},{r.get('enabled', True)}"
+                lines.append(line)
+            output = "\n".join(lines)
+        else:
+            output = "name,interval_minutes,title,message,urgency,enabled"
+    else:
+        output = json.dumps(config, indent=2)
+
+    if args.output:
+        Path(args.output).write_text(output, encoding="utf-8")
+        print(f"Exported to {args.output}")
+    else:
+        print(output)
+
+
+def cmd_import(args):
+    path = Path(args.file)
+    if not path.exists():
+        print(f"File not found: {args.file}")
+        sys.exit(1)
+
+    try:
+        content = path.read_text(encoding="utf-8")
+
+        if args.format == "auto":
+            fmt = "csv" if path.suffix == ".csv" else "json"
+        else:
+            fmt = args.format
+
+        if fmt == "csv":
+            lines = content.strip().splitlines()
+            if len(lines) < 2:
+                print("Invalid CSV format.")
+                sys.exit(1)
+
+            reminders = []
+            for line in lines[1:]:
+                parts = line.split(",")
+                if len(parts) >= 6:
+                    reminders.append(
+                        {
+                            "name": parts[0],
+                            "interval_minutes": int(parts[1])
+                            if parts[1].isdigit()
+                            else 30,
+                            "title": parts[2],
+                            "message": parts[3],
+                            "urgency": parts[4]
+                            if parts[4] in ["low", "normal", "critical"]
+                            else "normal",
+                            "enabled": parts[5].lower() == "true",
+                        }
+                    )
+            imported_data = {"reminders": reminders, "sound": True}
+        else:
+            imported_data = json.loads(content)
+
+        config = load_config()
+
+        if args.merge:
+            existing_names = {r["name"] for r in config.get("reminders", [])}
+            for r in imported_data.get("reminders", []):
+                if r["name"] not in existing_names:
+                    config.setdefault("reminders", []).append(r)
+            action = "Merged"
+        else:
+            config = imported_data
+            action = "Imported"
+
+        with open(CONFIG, "w") as f:
+            json.dump(config, f, indent=2)
+
+        print(f"{CHECK} {action} {len(imported_data.get('reminders', []))} reminder(s)")
+
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Import failed: {e}")
+        sys.exit(1)

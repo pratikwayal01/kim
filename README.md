@@ -109,8 +109,8 @@ Fires once, runs in the background, frees your terminal immediately.
   "sound": true,
   "slack": {
     "enabled": true,
-    "webhook_url": "https://hooks.slack.com/services/...",
-    "bot_token": "xoxb-...",
+    "webhook_url": "https://hooks.slack.com/services/your-webhook-id",
+    "bot_token": "xoxb-your-bot-token",
     "channel": "#general"
   }
 }
