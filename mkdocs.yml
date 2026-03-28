@@ -1,0 +1,47 @@
+site_name: kim — keep in mind
+site_description: Lightweight cross-platform reminder daemon for developers
+site_url: https://pratikwayal01.github.io/kim/
+repo_url: https://github.com/pratikwayal01/kim
+repo_name: pratikwayal01/kim
+
+theme:
+  name: material
+  palette:
+    scheme: default
+    primary: teal
+    accent: teal
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Commands: commands.md
+  - Sound: sound.md
+  - Slack: slack.md
+  - Development: development.md
+  - Changelog: changelog.md
