@@ -70,7 +70,10 @@ config: ~/.kim/config.json
 logs:   ~/.kim/kim.log
         """,
     )
-    parser.add_argument("--version", action="version", version=f"kim {VERSION}")
+    parser.add_argument(
+        "-v", "-V", "--version", "--VERSION", action="version", version=f"kim {VERSION}"
+    )
+    parser.add_argument("--HELP", action="help", help="show this help message and exit")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("start", help="Start the daemon")
@@ -213,8 +216,44 @@ logs:   ~/.kim/kim.log
     comp_p = sub.add_parser("completion", help="Generate shell completions")
     comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
 
-    if "-i" in sys.argv:
-        sys.argv = [a if a != "-i" else "interactive" for a in sys.argv]
+    # Case-insensitive command handling
+    known_commands = {
+        "start",
+        "stop",
+        "status",
+        "list",
+        "logs",
+        "edit",
+        "add",
+        "remove",
+        "enable",
+        "disable",
+        "update",
+        "remind",
+        "interactive",
+        "self-update",
+        "uninstall",
+        "export",
+        "import",
+        "validate",
+        "slack",
+        "sound",
+        "completion",
+        "_remind-fire",
+    }
+    new_argv = []
+    for arg in sys.argv[1:]:  # skip program name
+        lower = arg.lower()
+        if lower in known_commands:
+            new_argv.append(lower)
+        else:
+            new_argv.append(arg)
+    sys.argv = [sys.argv[0]] + new_argv
+
+    # Convert -i flag to interactive command (case-insensitive)
+    for i, arg in enumerate(sys.argv):
+        if arg.lower() == "-i":
+            sys.argv[i] = "interactive"
 
     args = parser.parse_args()
 

@@ -158,6 +158,27 @@ kim uninstall
 - [ ] Per-reminder cron-style schedule
 - [ ] Plugin system for custom notification channels
 
+## Future Features (Backward Compatible)
+
+These features can be added without breaking existing functionality:
+
+- **Multiple reminder lists**: Separate config files for work/personal
+- **Priority queues**: Critical reminders can override others
+- **Calendar integration**: Sync with Google Calendar/Outlook
+- **Email notifications**: Send reminders via email
+- **SMS integration**: Via Twilio or similar services
+- **Desktop widget**: Optional GUI for monitoring
+- **Mobile companion app**: Remote control of reminders
+- **Voice assistant integration**: Alexa/Google Home skills
+- **Geofencing reminders**: Trigger based on location
+- **Natural language processing**: `kim remind "tomorrow at 3pm" meeting`
+- **Shared team reminders**: Collaborative reminder lists
+- **Analytics dashboard**: Track reminder completion rates
+- **Dark mode for interactive TUI**
+- **Custom sound packs**
+- **Themes for notifications**
+- **Backup/restore to cloud**
+
 ---
 
 *Start small. Keep it in mind.*
