@@ -140,19 +140,13 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 
 ## Why kim?
 
-| Feature | kim | Remind | Cron | macOS Reminders | Google Calendar |
-|---------|-----|--------|------|-----------------|-----------------|
-| Pure stdlib (no deps) | ✅ | ❌ | ✅ | ❌ | ❌ |
-| CLI-first | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Zero config | ✅ | ✅ | ❌ | ✅ | ❌ |
-| One-shot reminders | ✅ | ✅ | ⚠️ | ✅ | ✅ |
-| Recurring intervals | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Cross-platform | ✅ | ⚠️ | ⚠️ | ❌ | ✅ |
-| Slack notifications | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Config-driven | ✅ | ⚠️ | ✅ | ❌ | ❌ |
-| Interactive mode | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Self-update | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Export/Import | ✅ | ❌ | ⚠️ | ❌ | ⚠️ |
+| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | Self-update | Export/Import |
+|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-------------|---------------|
+| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ⚠️ |
+| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
 
 ---
 
