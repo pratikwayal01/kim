@@ -9,8 +9,8 @@ Configuration is stored in `~/.kim/config.json`. The file is created on first ru
   "reminders": [
     {
       "name": "eye-break",
-      "interval_minutes": 30,
-      "title": "👁️ Eye Break",
+      "interval": "30m",
+      "title": "[eye] Eye Break",
       "message": "Look 20 feet away for 20 seconds. Blink slowly.",
       "urgency": "critical",
       "enabled": true
@@ -43,11 +43,13 @@ Configuration is stored in `~/.kim/config.json`. The file is created on first ru
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Unique identifier |
-| `interval_minutes` | number/string | Yes | How often to fire. Accepts:<br>- Integer (minutes)<br>- String: `"30m"`, `"2h"`, `"1d"` |
+| `interval` | number/string | Yes | How often to fire. Accepts:<br>- Integer (minutes)<br>- String: `"30m"`, `"2h"`, `"1d"` |
 | `title` | string | No | Notification heading (default: `Reminder: {name}`) |
 | `message` | string | No | Notification body (default: `Time for a reminder!`) |
 | `urgency` | string | No | `low`, `normal`, `critical` (default: `normal`) |
 | `enabled` | boolean | No | Enable/disable this reminder (default: `true`) |
+
+**Note:** The legacy field `interval_minutes` is still supported for backward compatibility.
 
 ### Slack Object
 
@@ -109,16 +111,16 @@ kim import reminders.csv --merge   # Merge with existing
   "reminders": [
     {
       "name": "eye-break",
-      "interval_minutes": "30m",
-      "title": "👁️ Eye Break",
+      "interval": "30m",
+      "title": "[eye] Eye Break",
       "message": "Look away from screen",
       "urgency": "critical",
       "enabled": true
     },
     {
       "name": "water",
-      "interval_minutes": "1h",
-      "title": "💧 Drink Water",
+      "interval": "1h",
+      "title": "[water] Drink Water",
       "message": "Stay hydrated",
       "urgency": "normal",
       "enabled": true
