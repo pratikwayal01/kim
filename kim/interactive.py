@@ -198,8 +198,13 @@ def cmd_interactive(args):
 
         config.setdefault("reminders", []).append(new_reminder)
 
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"\nError writing config file: {e}")
+            time.sleep(2)
+            return
 
         print(f"\n{CHECK} Added reminder '{name}'")
         log.info(f"Added reminder via interactive: {name}")
@@ -248,8 +253,13 @@ def cmd_interactive(args):
         if new_urgency in ["low", "normal", "critical"]:
             r["urgency"] = new_urgency
 
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"\nError writing config file: {e}")
+            time.sleep(2)
+            return
 
         print(f"\n{CHECK} Updated reminder '{r['name']}'")
         time.sleep(1)
@@ -280,8 +290,13 @@ def cmd_interactive(args):
         r = reminders[choice]
         r["enabled"] = not r.get("enabled", True)
 
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"\nError writing config file: {e}")
+            time.sleep(2)
+            return
 
         status = "enabled" if r["enabled"] else "disabled"
         print(f"\n{CHECK} Reminder '{r['name']}' is now {status}")
@@ -314,8 +329,13 @@ def cmd_interactive(args):
 
         config["reminders"].pop(choice)
 
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"\nError writing config file: {e}")
+            time.sleep(2)
+            return
 
         print(f"\n{CHECK} Removed reminder '{r['name']}'")
         time.sleep(1)

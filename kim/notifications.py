@@ -3,7 +3,6 @@ Notification backends for kim: platform-specific notifications and Slack.
 """
 
 import json
-import logging
 import os
 import platform
 import shutil
@@ -120,7 +119,7 @@ def notify(
     slack_config: dict = None,
 ):
     system = platform.system()
-    log.info(f"notify [{urgency}] → {title}")
+    log.debug(f"notify [{urgency}] → {title}")
     if system == "Linux":
         _notify_linux(title, message, urgency, sound, sound_file)
     elif system == "Darwin":
@@ -156,7 +155,7 @@ def _notify_slack_webhook(title: str, message: str, webhook_url: str):
             webhook_url, data=data, headers={"Content-Type": "application/json"}
         )
         urllib.request.urlopen(req, timeout=10)
-        log.info(f"Slack webhook notification sent: {title}")
+        log.debug(f"Slack webhook notification sent: {title}")
     except ImportError:
         log.error("urllib not available for Slack webhook")
     except urllib.error.URLError as e:
@@ -194,7 +193,7 @@ def _notify_slack_bot(title: str, message: str, bot_token: str, channel: str):
             },
         )
         urllib.request.urlopen(req, timeout=10)
-        log.info(f"Slack bot notification sent: {title}")
+        log.debug(f"Slack bot notification sent: {title}")
     except ImportError:
         log.error("urllib not available for Slack bot")
     except urllib.error.URLError as e:

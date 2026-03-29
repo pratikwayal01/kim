@@ -15,13 +15,33 @@ from ..utils import CHECK, MIDDOT, HLINE
 
 def cmd_edit(args):
     load_config()  # ensure config exists
+    editor = os.environ.get("EDITOR")
     if platform.system() == "Windows":
-        # os.execvp is POSIX-only; notepad is always available on Windows
-        editor = os.environ.get("EDITOR", "notepad")
-        subprocess.run([editor, str(CONFIG)])
+        if not editor:
+            editor = "notepad"
+        try:
+            subprocess.run([editor, str(CONFIG)])
+        except FileNotFoundError:
+            print(
+                f"Editor '{editor}' not found. Please set EDITOR environment variable."
+            )
+            sys.exit(1)
+        except OSError as e:
+            print(f"Error launching editor: {e}")
+            sys.exit(1)
     else:
-        editor = os.environ.get("EDITOR", "nano")
-        os.execvp(editor, [editor, str(CONFIG)])
+        if not editor:
+            editor = "nano"
+        try:
+            os.execvp(editor, [editor, str(CONFIG)])
+        except FileNotFoundError:
+            print(
+                f"Editor '{editor}' not found. Please set EDITOR environment variable."
+            )
+            sys.exit(1)
+        except OSError as e:
+            print(f"Error launching editor: {e}")
+            sys.exit(1)
 
 
 def cmd_list(args):
@@ -46,9 +66,12 @@ def cmd_logs(args):
     if not LOG_FILE.exists():
         print("No log file yet.")
         return
-    lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
-    for line in lines[-n:]:
-        print(line)
+    try:
+        lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+        for line in lines[-n:]:
+            print(line)
+    except OSError as e:
+        print(f"Error reading log file: {e}")
 
 
 def cmd_validate(args):
@@ -78,6 +101,9 @@ def cmd_validate(args):
     except json.JSONDecodeError as e:
         print(f"Invalid JSON: {e}")
         sys.exit(1)
+    except OSError as e:
+        print(f"Error reading config file: {e}")
+        sys.exit(1)
 
 
 def cmd_export(args):
@@ -102,8 +128,12 @@ def cmd_export(args):
         output = json.dumps(config, indent=2)
 
     if args.output:
-        Path(args.output).write_text(output, encoding="utf-8")
-        print(f"Exported to {args.output}")
+        try:
+            Path(args.output).write_text(output, encoding="utf-8")
+            print(f"Exported to {args.output}")
+        except OSError as e:
+            print(f"Error writing file: {e}")
+            sys.exit(1)
     else:
         print(output)
 

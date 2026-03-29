@@ -181,8 +181,12 @@ def cmd_sound(args):
             sys.exit(1)
         config["sound_file"] = path
         config["sound"] = True
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"Error writing config file: {e}")
+            sys.exit(1)
         print(f"{CHECK} Custom sound set: {path}")
         print("  Restart kim ('kim stop && kim start') to apply.")
         log.info(f"sound_file set to: {path}")
@@ -190,8 +194,12 @@ def cmd_sound(args):
 
     if args.clear:
         config["sound_file"] = None
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"Error writing config file: {e}")
+            sys.exit(1)
         print(f"{CHECK} Custom sound cleared {EM_DASH} reverted to system default.")
         print("  Restart kim ('kim stop && kim start') to apply.")
         log.info("sound_file cleared")
@@ -224,15 +232,23 @@ def cmd_sound(args):
 
     if args.enable:
         config["sound"] = True
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"Error writing config file: {e}")
+            sys.exit(1)
         print(f"{CHECK} Sound enabled.")
         return
 
     if args.disable:
         config["sound"] = False
-        with open(CONFIG, "w") as f:
-            json.dump(config, f, indent=2)
+        try:
+            with open(CONFIG, "w") as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"Error writing config file: {e}")
+            sys.exit(1)
         print(f"{CHECK} Sound disabled.")
         return
 

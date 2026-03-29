@@ -43,9 +43,12 @@ class TestCore(unittest.TestCase):
         self.assertEqual(parse_interval("1d"), 86400)
         # seconds
         self.assertEqual(parse_interval("60s"), 60)
-        # invalid raises ValueError
-        with self.assertRaises(ValueError):
-            parse_interval("invalid")
+        # invalid defaults to 30 minutes
+        self.assertEqual(parse_interval("invalid"), 1800)
+        # negative interval defaults to 30 minutes
+        self.assertEqual(parse_interval(-5), 1800)
+        # zero interval defaults to 30 minutes
+        self.assertEqual(parse_interval(0), 1800)
         # plain number string (minutes)
         self.assertEqual(parse_interval("45"), 2700)
 

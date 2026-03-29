@@ -21,9 +21,13 @@ from ..utils import BULLET, EM_DASH, WARNING, CIRCLE_OPEN, CIRCLE_FILLED, CHECK
 
 def cmd_start(args):
     if PID_FILE.exists():
-        pid = PID_FILE.read_text(encoding="utf-8").strip()
-        print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
-        sys.exit(1)
+        try:
+            pid = PID_FILE.read_text(encoding="utf-8").strip()
+            print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
+            sys.exit(1)
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"Could not read PID file: {e}. Removing stale PID file.")
+            PID_FILE.unlink(missing_ok=True)
 
     config = load_config()
     sound = config.get("sound", True)
@@ -43,7 +47,14 @@ def cmd_start(args):
             print("  Falling back to system default sound.")
             sound_file = None
 
-    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+    try:
+        PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+        # Set secure permissions on PID file
+        if platform.system() != "Windows":
+            os.chmod(PID_FILE, 0o600)
+    except OSError as e:
+        print(f"Error writing PID file: {e}")
+        sys.exit(1)
 
     print(f"kim v{VERSION} {EM_DASH} {len(active)} reminder(s) active")
     for r in active:
@@ -141,7 +152,12 @@ def cmd_stop(args):
     if not PID_FILE.exists():
         print("kim is not running.")
         sys.exit(0)
-    pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+    try:
+        pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        print(f"Could not read PID file: {e}")
+        PID_FILE.unlink(missing_ok=True)
+        return
     try:
         _terminate_process(pid)
         # On Windows the process is killed before its cleanup handler runs,
@@ -187,15 +203,15 @@ def cmd_status(args):
     paused = [r for r in config.get("reminders", []) if not r.get("enabled", True)]
 
     if PID_FILE.exists():
-        pid_str = PID_FILE.read_text(encoding="utf-8").strip()
         try:
+            pid_str = PID_FILE.read_text(encoding="utf-8").strip()
             pid = int(pid_str)
             if _is_process_running(pid):
                 print(f"{CIRCLE_FILLED} kim running   PID {pid}")
             else:
                 PID_FILE.unlink(missing_ok=True)
                 print(f"{CIRCLE_OPEN} kim stopped  (removed stale PID file)")
-        except ValueError:
+        except (OSError, UnicodeDecodeError, ValueError) as e:
             PID_FILE.unlink(missing_ok=True)
             print(f"{CIRCLE_OPEN} kim stopped  (removed invalid PID file)")
     else:

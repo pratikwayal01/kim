@@ -237,26 +237,33 @@ class KimScheduler:
     def _run(self) -> None:
         """Main loop — runs in the background scheduler thread."""
         while not self._stop_flag.is_set():
-            self._wakeup.clear()
+            try:
+                self._wakeup.clear()
 
-            with self._lock:
-                # Drain cancelled events from the top of the heap
-                while self._heap and self._heap[0].cancelled:
-                    heapq.heappop(self._heap)
+                with self._lock:
+                    # Drain cancelled events from the top of the heap
+                    while self._heap and self._heap[0].cancelled:
+                        heapq.heappop(self._heap)
 
-                if not self._heap:
-                    sleep_for = self._IDLE_SLEEP
-                else:
-                    sleep_for = max(0.0, self._heap[0].fire_at - time.time())
+                    if not self._heap:
+                        sleep_for = self._IDLE_SLEEP
+                    else:
+                        sleep_for = max(0.0, self._heap[0].fire_at - time.time())
 
-            # Sleep until next event (or woken early by add/remove/stop)
-            self._wakeup.wait(timeout=sleep_for)
+                # Sleep until next event (or woken early by add/remove/stop)
+                self._wakeup.wait(timeout=sleep_for)
 
-            if self._stop_flag.is_set():
-                break
+                if self._stop_flag.is_set():
+                    break
 
-            # Fire all events that are due (handles clock drift / burst)
-            self._fire_due_events()
+                # Fire all events that are due (handles clock drift / burst)
+                self._fire_due_events()
+            except Exception:
+                log.exception("Unexpected error in scheduler loop")
+                # Continue loop after logging; if it's a serious error,
+                # the loop may repeat. Consider stopping after repeated errors.
+                # For now, just sleep a bit to avoid tight loop.
+                time.sleep(1)
 
     def _fire_due_events(self) -> None:
         """Pop and fire every event whose fire_at <= now, then re-schedule."""
@@ -344,85 +351,25 @@ def start_daemon(config: dict) -> KimScheduler:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Quick smoke test
+# Integration shim  — replace KIM's daemon startup with this
 # ══════════════════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-    import json
 
-    fired = []
+def start_daemon(config: dict) -> KimScheduler:
+    """
+    Replaces the loop in kim.py that does:
 
-    def test_notifier(reminder):
-        fired.append(reminder["name"])
-        print(f"  🔔 FIRED: {reminder['title']} ({reminder['name']})")
+        for reminder in enabled_reminders:
+            t = threading.Thread(target=reminder_loop, args=(reminder,))
+            t.daemon = True
+            t.start()
 
-    config = {
-        "reminders": [
-            {
-                "name": "fast",
-                "interval_minutes": "0.05",
-                "title": "Fast (3s)",
-                "message": "test",
-                "urgency": "normal",
-                "enabled": True,
-            },
-            {
-                "name": "medium",
-                "interval_minutes": "0.1",
-                "title": "Medium (6s)",
-                "message": "test",
-                "urgency": "normal",
-                "enabled": True,
-            },
-            {
-                "name": "slow",
-                "interval_minutes": "0.2",
-                "title": "Slow (12s)",
-                "message": "test",
-                "urgency": "low",
-                "enabled": True,
-            },
-            {
-                "name": "off",
-                "interval_minutes": 1,
-                "title": "Disabled",
-                "message": "test",
-                "urgency": "critical",
-                "enabled": False,
-            },
-        ],
-        "sound": False,
-    }
+    with:
 
-    print("Starting KimScheduler smoke test (10 seconds)...")
-    scheduler = KimScheduler(config, test_notifier)
+        scheduler = start_daemon(config)
+
+    Returns the running KimScheduler so kim.py can call stop() on SIGTERM.
+    """
+    scheduler = KimScheduler(config, platform_notifier)
     scheduler.start()
-
-    # After 4 seconds, add a new reminder dynamically
-    time.sleep(4)
-    print("\n  [+] Adding new reminder at runtime...")
-    scheduler.add_reminder(
-        {
-            "name": "dynamic",
-            "interval_minutes": "0.05",
-            "title": "Dynamic Reminder",
-            "message": "added at runtime",
-            "urgency": "normal",
-            "enabled": True,
-        }
-    )
-
-    # After 7 seconds, remove one
-    time.sleep(3)
-    print("\n  [-] Removing 'fast' reminder...")
-    scheduler.remove_reminder("fast")
-
-    time.sleep(3)
-    scheduler.stop()
-
-    print(f"\nFired events: {fired}")
-    print("Status at shutdown:")
-    # scheduler stopped — read _live directly for final status
-    for name, event in scheduler._live.items():
-        print(f"  {name}: cancelled={event.cancelled}")
-    print("\n✅ Smoke test complete")
+    return scheduler
