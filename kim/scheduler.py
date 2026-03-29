@@ -57,6 +57,8 @@ class KimScheduler:
     # How long (seconds) the scheduler will sleep when the heap is empty.
     # It will wake up sooner if a new reminder is added.
     _IDLE_SLEEP = 60.0
+    # Max time to sleep when checking for one-shots (shorter to reduce drift)
+    _ONESHOT_CHECK_SLEEP = 1.0
 
     def __init__(
         self,
@@ -283,7 +285,18 @@ class KimScheduler:
                     if not self._heap:
                         sleep_for = self._IDLE_SLEEP
                     else:
-                        sleep_for = max(0.0, self._heap[0].fire_at - time.time())
+                        time_until_next = max(0.0, self._heap[0].fire_at - time.time())
+                        # Check if any event is a one-shot (has _oneshot_fire_at)
+                        has_oneshot = any(
+                            "_oneshot_fire_at" in e.reminder
+                            for e in self._heap
+                            if not e.cancelled
+                        )
+                        # Use shorter sleep for one-shots to reduce drift
+                        if has_oneshot:
+                            sleep_for = min(time_until_next, self._ONESHOT_CHECK_SLEEP)
+                        else:
+                            sleep_for = time_until_next
 
                 # Sleep until next event (or woken early by add/remove/stop)
                 self._wakeup.wait(timeout=sleep_for)
