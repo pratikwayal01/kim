@@ -131,34 +131,10 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 | Windows | Task Scheduler | PowerShell toast |
 
 - **Pure Python stdlib** — no pip installs
+- **Zero config** — works out of the box, creates default config on first run
 - All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
 - Config changes are detected automatically — no need to restart manually
 - Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
-
----
-
-## Why kim?
-
-| Feature | kim | Remind | Cron | macOS Reminders | Google Calendar |
- |---------|-----|--------|------|-----------------|-----------------|
- | Pure stdlib (no deps) | ✅ | ❌ | ✅ | ❌ | ❌ |
- | CLI-first | ✅ | ✅ | ✅ | ❌ | ❌ |
- | One-shot reminders | ✅ | ✅ | ⚠️ | ✅ | ✅ |
- | Recurring intervals | ✅ | ✅ | ✅ | ✅ | ✅ |
- | Cross-platform | ✅ | ⚠️ | ⚠️ | ❌ | ✅ |
- | Slack notifications | ✅ | ❌ | ❌ | ❌ | ❌ |
- | Config-driven | ✅ | ⚠️ | ✅ | ❌ | ❌ |
- | Interactive mode | ✅ | ❌ | ❌ | ❌ | ❌ |
- | Self-update | ✅ | ❌ | ❌ | ❌ | ❌ |
- | Export/Import | ✅ | ❌ | ⚠️ | ❌ | ⚠️ |
- | Zero config | ⚠️ | ✅ | ❌ | ✅ | ❌ |
-
-**kim** is designed for developers who want:
-- Terminal-based workflow (no GUI apps)
-- Config-driven reminders (version control your reminders)
-- Cross-platform consistency (Linux/macOS/Windows)
-- Zero dependencies (pure Python stdlib)
-- Slack integration out of the box
 
 ---
 
@@ -170,69 +146,18 @@ kim uninstall
 
 ---
 
-## v3.1.1 Release Notes
-
-### ✨ New Features
-- **Windows balloon notifications** - Now shows native Windows toast notifications with proper icon
-- **One-shot reminder persistence** - Reminders survive daemon restarts and system reboots
-- **Custom sound files** - Set custom notification sounds via `kim sound --set`
-
-### 🐛 Bug Fixes
-- Fixed Windows notification popup not displaying (missing icon initialization)
-- Fixed bare `except:` clause catching KeyboardInterrupt/SystemExit
-- Fixed missing `FileNotFoundError` handling for subprocess calls
-- Fixed interval validation to match scheduler behavior
-- Fixed duplicate Windows subprocess code
-- Fixed unused imports and dead code
-
-### 🔧 Refactoring
-- Removed duplicate `_windows_subprocess_cmd()` function
-- Removed unused `urllib` imports in misc.py
-- Changed `print()` to proper logging in core.py
-- Improved error handling across all notification backends
-- Added platform detection for macOS (osascript) and Linux (notify-send)
-
-### 📝 Documentation
-- Added comparison table with other reminder tools
-- Updated interval field to `interval` (was `interval_minutes`)
-- Improved CLI help text
-
----
-
 ## Roadmap
 
-- [x] CLI reminder management (`kim add`, `kim remove`, etc.)
+- [x] CLI reminder management
 - [x] Interactive mode
 - [x] Export / import
 - [x] Self-update
 - [x] Uninstall command
 - [x] Config validation
-- [x] Slack / webhook notifications
-- [x] One-shot reminders (`kim remind "standup" in 10m`)
-- [x] Windows balloon notifications
-- [ ] Per-reminder cron-style schedule
-- [ ] Plugin system for custom notification channels
-
-## Future Features (Backward Compatible)
-
-These features can be added without breaking existing functionality:
-
-- **Multiple reminder lists**: Separate config files for work/personal
-- **Priority queues**: Critical reminders can override others
-- **Calendar integration**: Sync with Google Calendar/Outlook
-- **Email notifications**: Send reminders via email
-- **SMS integration**: Via Twilio or similar services
-- **Desktop widget**: Optional GUI for monitoring
-- **Mobile companion app**: Remote control of reminders
-- **Voice assistant integration**: Alexa/Google Home skills
-- **Geofencing reminders**: Trigger based on location
-- **Natural language processing**: `kim remind "tomorrow at 3pm" meeting`
-- **Shared team reminders**: Collaborative reminder lists
-- **Analytics dashboard**: Track reminder completion rates
-- **Dark mode for interactive TUI**
-- **Custom sound packs**
-- **Themes for notifications**
-- **Backup/restore to cloud**
+- [x] Slack notifications
+- [x] One-shot reminders
+- [x] Custom sound files
+- [x] Windows notifications
 
 ---
 
