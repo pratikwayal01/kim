@@ -85,11 +85,14 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
 
 
 def _notify_windows(title, message, urgency, sound, sound_file=None):
-    t = title.replace("'", "\\'")
-    m = message.replace("\n", " ").replace("'", "\\'")
+    # Escape for PowerShell single-quoted string: double any single quotes
+    def ps_single_escape(s):
+        return s.replace("'", "''")
+
+    t = ps_single_escape(title)
+    m = ps_single_escape(message.replace("\n", " "))
+    # Use single quotes in PowerShell; escape embedded single quotes by doubling
     ps = f"""
-[Windows.UI.Notifications.ToastNotificationManager,
- Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null
 $tpl = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
 $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($tpl)
 $xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('{t}')) | Out-Null
@@ -98,10 +101,18 @@ $n = [Windows.UI.Notifications.ToastNotification]::new($xml)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('kim').Show($n)
 """
     try:
-        subprocess.run(
+        log.debug(f"PowerShell toast command: {ps}")
+        result = subprocess.run(
             ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            log.error(
+                f"PowerShell toast failed (rc={result.returncode}): {result.stderr}"
+            )
+        elif result.stderr:
+            log.debug(f"PowerShell toast stderr: {result.stderr}")
     except Exception as e:
         log.error(f"powershell toast: {e}")
 
