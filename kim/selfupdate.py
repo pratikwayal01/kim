@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .core import KIM_DIR, PID_FILE, VERSION, log
+from .utils import CHECK
 
 
 def cmd_selfupdate(args):
@@ -187,7 +188,7 @@ def cmd_selfupdate(args):
                 print(f"  Manually replace: {kim_path}")
                 return
 
-            print(f"\n✓ Updated to version {latest_version}")
+            print(f"\n{CHECK} Updated to version {latest_version}")
             print("Run 'kim --version' to verify.")
 
     except urllib.error.URLError as e:
@@ -292,5 +293,5 @@ def cmd_uninstall(args):
                     continue
             print(f"Removed {path}")
 
-    print("\n✓ kim has been uninstalled.")
+    print(f"\n{CHECK} kim has been uninstalled.")
     print("Thank you for using kim!")

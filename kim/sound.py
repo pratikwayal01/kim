@@ -122,6 +122,16 @@ def _play_sound_file_windows(path: str) -> None:
 
 def play_sound_file(path: str, system: str) -> None:
     """Dispatch sound playback to platform-specific function."""
+    if path is None:
+        # Play system default sound
+        if system == "Windows":
+            _play_system_sound_windows()
+        elif system == "Darwin":
+            _play_system_sound_mac()
+        elif system == "Linux":
+            _play_system_sound_linux()
+        return
+
     if system == "Linux":
         _play_sound_file_linux(path)
     elif system == "Darwin":
@@ -130,6 +140,33 @@ def play_sound_file(path: str, system: str) -> None:
         _play_sound_file_windows(path)
     else:
         log.warning(f"Unsupported platform for sound playback: {system}")
+
+
+def _play_system_sound_windows() -> None:
+    """Play system default sound on Windows."""
+    log.debug("Playing system sound on Windows")
+    try:
+        import winsound
+
+        winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC)
+        log.debug("winsound played")
+    except Exception as e:
+        log.debug(f"winsound failed: {e}")
+        # Fallback to PowerShell
+        try:
+            subprocess.Popen(
+                [
+                    "powershell",
+                    "-Command",
+                    "[System.Media.SystemSounds]::Asterisk.Play()",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            log.debug("PowerShell sound started")
+        except Exception as e2:
+            log.debug(f"PowerShell sound failed: {e2}")
 
 
 def validate_sound_file(path: str) -> tuple[bool, str]:

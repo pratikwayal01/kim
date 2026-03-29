@@ -108,7 +108,7 @@ class KimScheduler:
     @staticmethod
     def _parse_interval(reminder: dict) -> Optional[float]:
         """
-        Convert interval_minutes to seconds.
+        Convert interval (or interval_minutes for backward compat) to seconds.
         Supports:
           - int / float  → treated as minutes
           - "30m"        → 30 minutes
@@ -116,7 +116,8 @@ class KimScheduler:
           - "1d"         → 1 day
         Returns None if the value is invalid.
         """
-        raw = reminder.get("interval_minutes", 0)
+        # Support both 'interval' and 'interval_minutes' (legacy)
+        raw = reminder.get("interval") or reminder.get("interval_minutes", 0)
         try:
             if isinstance(raw, (int, float)):
                 return float(raw) * 60
@@ -193,6 +194,40 @@ class KimScheduler:
         self._wakeup.set()
         log.info("Removed reminder %r", name)
         return True
+
+    def _oneshot_add(self, reminder: dict) -> None:
+        """
+        Add a one-shot reminder that fires at a specific time and does not reschedule.
+        Internal method called by daemon for persisted one-shot reminders.
+        """
+        name = reminder["name"]
+        fire_at = reminder.get("_oneshot_fire_at")
+        if fire_at is None:
+            log.warning("One-shot reminder missing fire_at: %r", name)
+            return
+
+        with self._lock:
+            # Cancel any existing event for this name
+            if name in self._live:
+                self._live[name].cancelled = True
+
+            event = _Event(
+                fire_at=fire_at,
+                reminder=deepcopy(reminder),
+            )
+            self._live[name] = event
+            heapq.heappush(self._heap, event)
+
+        self._wakeup.set()
+        log.info("Added one-shot reminder %r (fires at %s)", name, time.ctime(fire_at))
+
+    def _oneshot_remove(self, name: str) -> None:
+        """Remove a one-shot reminder after it fires."""
+        with self._lock:
+            event = self._live.pop(name, None)
+            if event:
+                event.cancelled = True
+        log.info("Removed one-shot reminder %r", name)
 
     def update_reminder(self, reminder: dict) -> None:
         """Update an existing reminder in place (kim update)."""
@@ -283,12 +318,23 @@ class KimScheduler:
 
         # Fire outside the lock so notifier can call add/remove safely
         for event in to_reschedule:
+            # Check if this is a one-shot reminder (has _oneshot_fire_at)
+            is_oneshot = "_oneshot_fire_at" in event.reminder
+
             try:
                 self._notifier(event.reminder)
             except Exception:
                 log.exception(
                     "Notifier raised for reminder %r", event.reminder.get("name")
                 )
+
+            # Skip rescheduling for one-shot reminders
+            if is_oneshot:
+                log.debug(
+                    "One-shot reminder %r fired, not rescheduling",
+                    event.reminder.get("name"),
+                )
+                continue
 
             # Re-schedule this reminder for its next interval
             interval = self._parse_interval(event.reminder)
@@ -323,31 +369,6 @@ def platform_notifier(reminder: dict) -> None:
     urgency = reminder.get("urgency", "normal")
     # Use the full notify function with sound=False, slack_config=None
     notify(title, message, urgency, sound=False, slack_config=None)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Integration shim  — replace KIM's daemon startup with this
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def start_daemon(config: dict) -> KimScheduler:
-    """
-    Replaces the loop in kim.py that does:
-
-        for reminder in enabled_reminders:
-            t = threading.Thread(target=reminder_loop, args=(reminder,))
-            t.daemon = True
-            t.start()
-
-    with:
-
-        scheduler = start_daemon(config)
-
-    Returns the running KimScheduler so kim.py can call stop() on SIGTERM.
-    """
-    scheduler = KimScheduler(config, platform_notifier)
-    scheduler.start()
-    return scheduler
 
 
 # ══════════════════════════════════════════════════════════════════════════════

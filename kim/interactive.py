@@ -17,7 +17,7 @@ except ImportError:
     termios = None
 
 from .core import CONFIG, PID_FILE, load_config, log
-from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT
+from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT, CIRCLE_OPEN, CIRCLE_FILLED
 
 
 def _enable_windows_ansi() -> None:
@@ -154,7 +154,7 @@ def cmd_interactive(args):
             for r in reminders:
                 enabled = CHECK if r.get("enabled", True) else MIDDOT
                 print(
-                    f"{r['name']:<20} {str(r['interval_minutes']) + ' min':>10}   {r.get('urgency', 'normal'):<10} {enabled}"
+                    f"{r['name']:<20} {str(r.get('interval') or r.get('interval_minutes', 30)) + ' min':>10}   {r.get('urgency', 'normal'):<10} {enabled}"
                 )
         print("\nPress Enter to continue...")
         input()
@@ -189,7 +189,7 @@ def cmd_interactive(args):
 
         new_reminder = {
             "name": name,
-            "interval_minutes": interval,
+            "interval": interval,
             "title": title or f"Reminder: {name}",
             "message": message or "Time for a reminder!",
             "urgency": urgency,
@@ -221,7 +221,9 @@ def cmd_interactive(args):
 
         print("\033[1;32m=== Select Reminder to Edit ===\033[0m\n")
         for i, r in enumerate(reminders):
-            print(f"  {i + 1}. {r['name']} (every {r['interval_minutes']} min)")
+            print(
+                f"  {i + 1}. {r['name']} (every {r.get('interval') or r.get('interval_minutes', 30)} min)"
+            )
 
         try:
             choice = int(input("\nEnter number: ").strip()) - 1
@@ -234,10 +236,12 @@ def cmd_interactive(args):
         print(f"\nEditing: {r['name']}")
         print("(Press Enter to keep current value)\n")
 
-        new_interval = input(f"Interval [{r['interval_minutes']}]: ").strip()
+        new_interval = input(
+            f"Interval [{r.get('interval') or r.get('interval_minutes', 30)}]: "
+        ).strip()
         if new_interval:
             try:
-                r["interval_minutes"] = int(new_interval)
+                r["interval"] = int(new_interval)
             except ValueError:
                 pass
 
@@ -369,9 +373,9 @@ def cmd_interactive(args):
             active = len([r for r in reminders if r.get("enabled", True)])
             print(f"  Active reminders: {active}/{len(reminders)}")
             if PID_FILE.exists():
-                print("  Status: \033[1;32m● Running\033[0m")
+                print(f"  Status: \033[1;32m{CIRCLE_FILLED} Running\033[0m")
             else:
-                print("  Status: \033[0;90m○ Stopped\033[0m")
+                print(f"  Status: \033[0;90m{CIRCLE_OPEN} Stopped\033[0m")
             print()
 
             print_menu(selected)

@@ -51,7 +51,7 @@ def cmd_list(args):
     print(HLINE * 58)
     for r in reminders:
         enabled = CHECK if r.get("enabled", True) else MIDDOT
-        interval = r.get("interval_minutes", 30)
+        interval = r.get("interval") or r.get("interval_minutes", 30)
         if isinstance(interval, str):
             interval_str = interval
         else:
@@ -86,13 +86,14 @@ def cmd_validate(args):
             if "name" not in r:
                 print("Error: Reminder missing 'name' field.")
                 sys.exit(1)
-            if "interval_minutes" not in r:
-                print(f"Error: Reminder '{r.get('name')}' missing 'interval_minutes'.")
+            # Accept both 'interval' and 'interval_minutes' (legacy)
+            interval_val = r.get("interval") or r.get("interval_minutes")
+            if interval_val is None:
+                print(f"Error: Reminder '{r.get('name')}' missing 'interval' field.")
                 sys.exit(1)
-            interval_val = r["interval_minutes"]
             if isinstance(interval_val, str):
                 pass
-            elif not isinstance(interval_val, int) or interval_val < 1:
+            elif not isinstance(interval_val, (int, float)) or interval_val < 0:
                 print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
                 sys.exit(1)
 
@@ -114,16 +115,16 @@ def cmd_export(args):
     elif args.format == "csv":
         reminders = config.get("reminders", [])
         if reminders:
-            lines = ["name,interval_minutes,title,message,urgency,enabled"]
+            lines = ["name,interval,title,message,urgency,enabled"]
             for r in reminders:
                 name = r.get("name", "").replace(",", ";")
                 title = r.get("title", "").replace(",", ";")
                 message = r.get("message", "").replace(",", ";").replace("\n", " ")
-                line = f"{name},{r.get('interval_minutes', '')},{title},{message},{r.get('urgency', 'normal')},{r.get('enabled', True)}"
+                line = f"{name},{r.get('interval') or r.get('interval_minutes', '')},{title},{message},{r.get('urgency', 'normal')},{r.get('enabled', True)}"
                 lines.append(line)
             output = "\n".join(lines)
         else:
-            output = "name,interval_minutes,title,message,urgency,enabled"
+            output = "name,interval,title,message,urgency,enabled"
     else:
         output = json.dumps(config, indent=2)
 
@@ -165,9 +166,9 @@ def cmd_import(args):
                     reminders.append(
                         {
                             "name": parts[0],
-                            "interval_minutes": int(parts[1])
-                            if parts[1].isdigit()
-                            else 30,
+                            "interval": parts[1]
+                            if not parts[1].isdigit()
+                            else int(parts[1]),
                             "title": parts[2],
                             "message": parts[3],
                             "urgency": parts[4]

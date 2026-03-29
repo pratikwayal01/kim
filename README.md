@@ -73,7 +73,7 @@ Fires once, runs in the background, frees your terminal immediately.
   "reminders": [
     {
       "name": "eye-break",
-      "interval_minutes": 30,
+      "interval": "30m",
       "title": "👁️ Eye Break",
       "message": "Look 20 feet away for 20 seconds. Blink slowly.",
       "urgency": "critical",
@@ -81,7 +81,7 @@ Fires once, runs in the background, frees your terminal immediately.
     },
     {
       "name": "water",
-      "interval_minutes": 60,
+      "interval": "1h",
       "title": "💧 Drink Water",
       "message": "Stay hydrated.",
       "urgency": "normal",
@@ -95,7 +95,7 @@ Fires once, runs in the background, frees your terminal immediately.
 | Field | Values | Description |
 |---|---|---|
 | `name` | string | Unique identifier |
-| `interval_minutes` | number or string (`"30m"`, `"1h"`, `"1d"`) | How often to fire |
+| `interval` | number or string (`"30m"`, `"1h"`, `"1d"`) | How often to fire |
 | `title` | string | Notification heading |
 | `message` | string | Notification body |
 | `urgency` | `low` / `normal` / `critical` | Notification priority |
@@ -137,11 +137,65 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 
 ---
 
+## Why kim?
+
+| Feature | kim | Remind | Cron | macOS Reminders | Google Calendar |
+ |---------|-----|--------|------|-----------------|-----------------|
+ | Pure stdlib (no deps) | ✅ | ❌ | ✅ | ❌ | ❌ |
+ | CLI-first | ✅ | ✅ | ✅ | ❌ | ❌ |
+ | One-shot reminders | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+ | Recurring intervals | ✅ | ✅ | ✅ | ✅ | ✅ |
+ | Cross-platform | ✅ | ⚠️ | ⚠️ | ❌ | ✅ |
+ | Slack notifications | ✅ | ❌ | ❌ | ❌ | ❌ |
+ | Config-driven | ✅ | ⚠️ | ✅ | ❌ | ❌ |
+ | Interactive mode | ✅ | ❌ | ❌ | ❌ | ❌ |
+ | Self-update | ✅ | ❌ | ❌ | ❌ | ❌ |
+ | Export/Import | ✅ | ❌ | ⚠️ | ❌ | ⚠️ |
+ | Zero config | ⚠️ | ✅ | ❌ | ✅ | ❌ |
+
+**kim** is designed for developers who want:
+- Terminal-based workflow (no GUI apps)
+- Config-driven reminders (version control your reminders)
+- Cross-platform consistency (Linux/macOS/Windows)
+- Zero dependencies (pure Python stdlib)
+- Slack integration out of the box
+
+---
+
 ## Uninstall
 
 ```bash
 kim uninstall
 ```
+
+---
+
+## v3.1.1 Release Notes
+
+### ✨ New Features
+- **Windows balloon notifications** - Now shows native Windows toast notifications with proper icon
+- **One-shot reminder persistence** - Reminders survive daemon restarts and system reboots
+- **Custom sound files** - Set custom notification sounds via `kim sound --set`
+
+### 🐛 Bug Fixes
+- Fixed Windows notification popup not displaying (missing icon initialization)
+- Fixed bare `except:` clause catching KeyboardInterrupt/SystemExit
+- Fixed missing `FileNotFoundError` handling for subprocess calls
+- Fixed interval validation to match scheduler behavior
+- Fixed duplicate Windows subprocess code
+- Fixed unused imports and dead code
+
+### 🔧 Refactoring
+- Removed duplicate `_windows_subprocess_cmd()` function
+- Removed unused `urllib` imports in misc.py
+- Changed `print()` to proper logging in core.py
+- Improved error handling across all notification backends
+- Added platform detection for macOS (osascript) and Linux (notify-send)
+
+### 📝 Documentation
+- Added comparison table with other reminder tools
+- Updated interval field to `interval` (was `interval_minutes`)
+- Improved CLI help text
 
 ---
 
@@ -155,6 +209,7 @@ kim uninstall
 - [x] Config validation
 - [x] Slack / webhook notifications
 - [x] One-shot reminders (`kim remind "standup" in 10m`)
+- [x] Windows balloon notifications
 - [ ] Per-reminder cron-style schedule
 - [ ] Plugin system for custom notification channels
 

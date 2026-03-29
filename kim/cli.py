@@ -8,6 +8,9 @@ import sys
 
 from .core import VERSION
 from .interactive import _enable_windows_ansi, cmd_interactive
+
+# Platform-specific alarm symbol for help text
+ALARM = "⏰" if platform.system() != "Windows" else "Reminder"
 from .commands.daemon import cmd_start, cmd_stop, cmd_status
 from .commands.management import (
     cmd_add,
@@ -139,12 +142,12 @@ logs:   ~/.kim/kim.log
         "time", nargs="+", help="When to fire, e.g: 'in 10m', '1h', '2h 30m', '90s'"
     )
     remind_p.add_argument(
-        "-t", "--title", help="Notification title (default: ⏰ Reminder)"
+        "-t", "--title", help=f"Notification title (default: {ALARM} Reminder)"
     )
 
     fire_p = sub.add_parser("_remind-fire")
     fire_p.add_argument("--message", required=True)
-    fire_p.add_argument("--title", default="⏰ Reminder")
+    fire_p.add_argument("--title", default=f"{ALARM} Reminder")
     fire_p.add_argument("--seconds", type=float, required=True)
 
     sub.add_parser("interactive", help="Enter interactive mode").add_argument(

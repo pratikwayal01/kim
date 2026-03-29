@@ -8,6 +8,7 @@ import platform
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from ..sound import validate_sound_file
 from ..scheduler import KimScheduler
 
 from ..utils import BULLET, EM_DASH, WARNING, CIRCLE_OPEN, CIRCLE_FILLED, CHECK
+from .misc import load_oneshot_reminders, remove_oneshot
 
 
 def cmd_start(args):
@@ -58,7 +60,7 @@ def cmd_start(args):
 
     print(f"kim v{VERSION} {EM_DASH} {len(active)} reminder(s) active")
     for r in active:
-        interval = r.get("interval_minutes", 30)
+        interval = r.get("interval") or r.get("interval_minutes", 30)
         interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
         print(f"  {BULLET} {r['name']:<20} every {interval_str}")
     if sound_file:
@@ -71,6 +73,10 @@ def cmd_start(args):
     _slack = slack_config if slack_config.get("enabled") else None
 
     def kim_notifier(reminder: dict) -> None:
+        # Check if this is a one-shot reminder (has _oneshot_fire_at)
+        is_oneshot = "_oneshot_fire_at" in reminder
+        fire_at = reminder.get("_oneshot_fire_at")
+
         notify(
             title=reminder.get("title", "Reminder"),
             message=reminder.get("message", ""),
@@ -80,6 +86,13 @@ def cmd_start(args):
             slack_config=_slack,
         )
         log.info(f"[{reminder.get('name')}] fired")
+
+        # If this was a one-shot, remove from persistence
+        if is_oneshot and fire_at is not None:
+            remove_oneshot(fire_at)
+
+    # Load persisted one-shot reminders BEFORE creating scheduler
+    oneshots = load_oneshot_reminders()
 
     # ── Start heapq scheduler (replaces per-reminder threads) ─────────────────
     scheduler = KimScheduler(config, kim_notifier)
@@ -104,6 +117,20 @@ def cmd_start(args):
         sound=False,
         slack_config=_slack,
     )
+
+    # Add persisted one-shot reminders to scheduler BEFORE starting
+    if oneshots:
+        log.info(f"Loading {len(oneshots)} persisted one-shot reminder(s)")
+        for o in oneshots:
+            oneshot_reminder = {
+                "name": f"oneshot-{int(o['fire_at'])}",
+                "title": o.get("title", "One-shot Reminder"),
+                "message": o.get("message", ""),
+                "urgency": "critical",
+                "enabled": True,
+                "_oneshot_fire_at": o["fire_at"],
+            }
+            scheduler._oneshot_add(oneshot_reminder)
 
     scheduler.start()
 
@@ -236,7 +263,7 @@ def cmd_status(args):
         print("  Active reminders:")
         for r in active:
             print(
-                f"    {CHECK} {r['name']:<20} every {r['interval_minutes']} min  [{r.get('urgency', 'normal')}]"
+                f"    {CHECK} {r['name']:<20} every {r.get('interval') or r.get('interval_minutes', '30')}  [{r.get('urgency', 'normal')}]"
             )
     if paused:
         print("  Disabled reminders:")

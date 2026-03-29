@@ -16,6 +16,9 @@ if platform.system() == "Windows":
     MIDDOT = "."
     ARROW = ">"
     HLINE = "-"
+    ALARM = "Reminder"
+    PLAY = ">"
+    BELL = "!"
 else:
     CHECK = "\u2713"  # ✓
     CROSS = "\u2717"  # ✗
@@ -27,3 +30,6 @@ else:
     MIDDOT = "\u00b7"  # ·
     ARROW = "\u25ba"  # ►
     HLINE = "\u2501"  # ━
+    ALARM = "\u23f0"  # ⏰
+    PLAY = "\u25b6"  # ▶
+    BELL = "\U0001f514"  # 🔔

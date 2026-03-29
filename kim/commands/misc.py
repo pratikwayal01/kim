@@ -9,31 +9,12 @@ import re
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-from ..core import CONFIG, VERSION, load_config, log
+from ..core import CONFIG, ONESHOT_FILE, VERSION, load_config, log
 from ..notifications import notify
 from ..sound import SOUND_FORMAT_NOTES, play_sound_file, validate_sound_file
-from ..utils import CHECK, CROSS, EM_DASH
-
-
-def _windows_subprocess_cmd():
-    """
-    Return the correct command prefix to re-invoke this script on Windows.
-
-    - If running as a PyInstaller/cx_Freeze frozen exe: [sys.executable]
-    - If running as a .py script via python.exe:        [sys.executable, script_path]
-    - If running via a pip-installed console_scripts entry point (.exe wrapper):
-      the wrapper already embeds the python path, but sys.argv[0] is the .exe,
-      so we still use [sys.executable, script_path] pointing to the real .py.
-    """
-    if getattr(sys, "frozen", False):
-        # Frozen executable — the exe IS the interpreter
-        return [sys.executable]
-    script = os.path.abspath(sys.argv[0])
-    return [sys.executable, script]
+from ..utils import CHECK, CROSS, EM_DASH, ALARM, PLAY, BELL
 
 
 def cmd_remind(args):
@@ -50,7 +31,8 @@ def cmd_remind(args):
         sys.exit(1)
 
     message = args.message
-    title = args.title or "⏰ Reminder"
+    # Default title: "Reminder" on Windows, "⏰ Reminder" elsewhere
+    title = args.title or ("Reminder" if ALARM == "Reminder" else f"{ALARM} Reminder")
     sleep_seconds = total_seconds
 
     parts = []
@@ -61,28 +43,44 @@ def cmd_remind(args):
             remaining %= unit
     display = " ".join(parts)
 
-    print(f"⏰ Reminder set: '{message}' in {display}")
+    print(f"{title} set: '{message}' in {display}")
     log.info(f"One-shot reminder set: '{message}' in {display}")
 
+    # Save one-shot reminder for persistence across reboots
+    fire_time = time.time() + sleep_seconds
+    oneshot = {
+        "message": message,
+        "title": title,
+        "fire_at": fire_time,
+    }
+    oneshots = []
+    if ONESHOT_FILE.exists():
+        try:
+            oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            oneshots = []
+    oneshots.append(oneshot)
+    try:
+        ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
+        log.debug(f"Saved one-shot reminder to {ONESHOT_FILE}")
+    except OSError as e:
+        log.warning(f"Could not save one-shot reminder: {e}")
+
     if platform.system() == "Windows":
-        # FIX 1: build cmd with sys.executable so Windows can actually launch it.
-        # FIX 2: omit close_fds=True — it is not supported on Windows.
-        cmd = _windows_subprocess_cmd() + [
-            "_remind-fire",
-            "--message",
-            message,
-            "--title",
-            title,
-            "--seconds",
-            str(sleep_seconds),
+        # Spawn background process using PowerShell with hidden window
+        cmd = [
+            "powershell",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            f'python -m kim _remind-fire --message "{message}" --title "{title}" --seconds {sleep_seconds}',
         ]
         subprocess.Popen(
             cmd,
-            creationflags=subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NEW_PROCESS_GROUP,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
         )
         return
 
@@ -126,6 +124,43 @@ def cmd_remind_fire(args):
         slack_config=slack_config if slack_config.get("enabled") else None,
     )
     log.info(f"One-shot reminder fired: '{args.message}'")
+
+
+def load_oneshot_reminders():
+    """
+    Load persisted one-shot reminders from file.
+    Returns list of oneshot dicts with fire_at timestamp.
+    Called by daemon on startup.
+    """
+    if not ONESHOT_FILE.exists():
+        return []
+    try:
+        oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        now = time.time()
+        # Filter out oneshots that have already fired (past fire_at)
+        valid = [o for o in oneshots if o.get("fire_at", 0) > now]
+        if len(valid) != len(oneshots):
+            # Clean up expired oneshots
+            ONESHOT_FILE.write_text(json.dumps(valid, indent=2), encoding="utf-8")
+            log.info(
+                f"Cleaned up {len(oneshots) - len(valid)} expired one-shot reminders"
+            )
+        return valid
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning(f"Could not load one-shot reminders: {e}")
+        return []
+
+
+def remove_oneshot(fire_at):
+    """Remove a one-shot reminder from the persisted file by fire_at timestamp."""
+    if not ONESHOT_FILE.exists():
+        return
+    try:
+        oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        oneshots = [o for o in oneshots if o.get("fire_at") != fire_at]
+        ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
+    except (json.JSONDecodeError, OSError):
+        pass
 
 
 def cmd_slack(args):
@@ -177,7 +212,7 @@ def cmd_sound(args):
         path = os.path.abspath(os.path.expanduser(args.set))
         ok, err = validate_sound_file(path)
         if not ok:
-            print(f"✗ {err}")
+            print(f"{CROSS} {err}")
             sys.exit(1)
         config["sound_file"] = path
         config["sound"] = True
@@ -216,13 +251,13 @@ def cmd_sound(args):
         if sound_file:
             ok, err = validate_sound_file(sound_file)
             if not ok:
-                print(f"✗ Cannot play: {err}")
+                print(f"{CROSS} Cannot play: {err}")
                 sys.exit(1)
-            print(f"▶ Playing: {sound_file}")
+            print(f"{PLAY} Playing: {sound_file}")
         else:
-            print("▶ Playing system default sound...")
+            print(f"{PLAY} Playing system default sound...")
         notify(
-            "🔔 kim sound test",
+            f"{BELL} kim sound test",
             "This is how your reminder will sound.",
             urgency="normal",
             sound=True,

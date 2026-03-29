@@ -77,6 +77,8 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
             ["osascript", "-e", f'display notification "{m}" with title "{t}" {snd}'],
             check=True,
         )
+    except FileNotFoundError:
+        log.error("osascript not found. Is this macOS?")
     except Exception as e:
         log.error(f"osascript: {e}")
 
@@ -85,38 +87,36 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
 
 
 def _notify_windows(title, message, urgency, sound, sound_file=None):
-    # Escape for PowerShell single-quoted string: double any single quotes
-    def ps_single_escape(s):
-        return s.replace("'", "''")
-
-    t = ps_single_escape(title)
-    m = ps_single_escape(message.replace("\n", " "))
-    # Use single quotes in PowerShell; escape embedded single quotes by doubling
-    ps = f"""
-$tpl = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
-$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($tpl)
-$xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('{t}')) | Out-Null
-$xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('{m}')) | Out-Null
-$n = [Windows.UI.Notifications.ToastNotification]::new($xml)
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('kim').Show($n)
-"""
+    # Try balloon notification
     try:
-        log.debug(f"PowerShell toast command: {ps}")
-        result = subprocess.run(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
-            capture_output=True,
-            text=True,
+        t = title.replace("'", "''").replace("\n", " ")
+        m = message.replace("'", "''").replace("\n", " ")
+        ps = f'''
+Add-Type -AssemblyName System.Windows.Forms
+$n = New-Object System.Windows.Forms.NotifyIcon
+$n.Icon = [System.Drawing.SystemIcons]::Information
+$n.Visible = $true
+$n.BalloonTipIcon = "Info"
+$n.BalloonTipTitle = "{t}"
+$n.BalloonTipText = "{m}"
+$n.ShowBalloonTip(5000)
+Start-Sleep -Seconds 6
+$n.Visible = $false
+$n.Dispose()
+'''
+        subprocess.run(
+            ["powershell", "-Command", ps],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=0x08000000,
         )
-        if result.returncode != 0:
-            log.error(
-                f"PowerShell toast failed (rc={result.returncode}): {result.stderr}"
-            )
-        elif result.stderr:
-            log.debug(f"PowerShell toast stderr: {result.stderr}")
+    except FileNotFoundError:
+        log.error("powershell not found. Is this Windows?")
     except Exception as e:
-        log.error(f"powershell toast: {e}")
+        log.warning(f"Balloon notification failed: {e}")
 
-    if sound and sound_file:
+    # Play sound file if specified (or system default if sound=True but no custom file)
+    if sound or sound_file:
         play_sound_file(sound_file, "Windows")
 
 

@@ -24,7 +24,7 @@ def cmd_add(args):
 
     new_reminder = {
         "name": name,
-        "interval_minutes": interval_str,
+        "interval": interval_str,
         "title": args.title or f"Reminder: {name}",
         "message": args.message or "Time for a reminder!",
         "urgency": args.urgency,
@@ -137,7 +137,7 @@ def cmd_update(args):
         if r.get("name") == name:
             found = True
             if args.interval is not None:
-                r["interval_minutes"] = args.interval
+                r["interval"] = args.interval
             if args.title is not None:
                 r["title"] = args.title
             if args.message is not None:

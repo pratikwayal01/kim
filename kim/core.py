@@ -13,6 +13,7 @@ KIM_DIR = Path.home() / ".kim"
 CONFIG = KIM_DIR / "config.json"
 LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
+ONESHOT_FILE = KIM_DIR / "oneshots.json"  # persisted one-shot reminders
 KIM_DIR.mkdir(exist_ok=True)
 
 VERSION = "3.0.0"
@@ -48,17 +49,17 @@ DEFAULT_CONFIG = {
     "reminders": [
         {
             "name": "eye-break",
-            "interval_minutes": 30,
-            "title": "👁️ Eye Break",
+            "interval": "30m",
+            "title": "[eye] Eye Break",
             "message": "Look 20 feet away for 20 seconds. Blink slowly.",
             "urgency": "critical",
             "enabled": True,
         },
         {
             "name": "water",
-            "interval_minutes": 60,
-            "title": "💧 Drink Water",
-            "message": "Stay hydrated — drink a glass of water.",
+            "interval": "60m",
+            "title": "[water] Drink Water",
+            "message": "Stay hydrated -- drink a glass of water.",
             "urgency": "normal",
             "enabled": False,
         },
@@ -83,8 +84,8 @@ def load_config() -> dict:
             if platform.system() != "Windows":
                 os.chmod(CONFIG, 0o600)
         except OSError as e:
-            print(f"Warning: Could not create config file: {e}")
-        print(f"Created default config: {CONFIG}")
+            log.warning(f"Could not create config file: {e}")
+        log.info(f"Created default config: {CONFIG}")
         return DEFAULT_CONFIG.copy()
     try:
         with open(CONFIG, encoding="utf-8") as f:
