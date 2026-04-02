@@ -81,11 +81,16 @@ def cmd_remind(args):
 
     if platform.system() == "Windows":
         cmd = [
-            "powershell",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            f'python -m kim _remind-fire --message "{message}" --title "{title}" --seconds {sleep_seconds}',
+            sys.executable,
+            "-m",
+            "kim",
+            "_remind-fire",
+            "--message",
+            message,
+            "--title",
+            title,
+            "--seconds",
+            str(sleep_seconds),
         ]
         try:
             subprocess.Popen(
@@ -96,7 +101,7 @@ def cmd_remind(args):
                 creationflags=0x08000000,
             )
         except FileNotFoundError:
-            log.error("powershell not found for one-shot reminder")
+            log.error("python not found for one-shot reminder")
             print("Error: could not spawn background process.")
             sys.exit(1)
         return
