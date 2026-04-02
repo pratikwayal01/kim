@@ -57,8 +57,58 @@ Configuration is stored in `~/.kim/config.json`. The file is created on first ru
 | `message` | string | No | Notification body (default: `Time for a reminder!`) |
 | `urgency` | string | No | `low`, `normal`, `critical` (default: `normal`) |
 | `enabled` | boolean | No | Enable/disable this reminder (default: `true`) |
+| `sound` | boolean | No | Override global sound for this reminder |
+| `sound_file` | string | No | Per-reminder sound file (overrides global `sound_file`) |
+| `slack` | object | No | Per-reminder Slack config (overrides global `slack`) |
 
 **Note:** The legacy field `interval_minutes` is still supported for backward compatibility.
+
+### Per-Reminder Overrides
+
+Each reminder can override the global sound and Slack settings. This lets you route different reminders to different Slack channels or play different sounds.
+
+```json
+{
+  "reminders": [
+    {
+      "name": "standup",
+      "interval": "30m",
+      "title": "Standup Reminder",
+      "message": "Time for standup!",
+      "sound_file": "/home/user/sounds/urgent.wav",
+      "slack": {
+        "enabled": true,
+        "webhook_url": "https://hooks.slack.com/services/standup-webhook",
+        "channel": "#standup-alerts"
+      }
+    },
+    {
+      "name": "water",
+      "interval": "1h",
+      "title": "Drink Water",
+      "message": "Stay hydrated",
+      "sound": false,
+      "slack": {
+        "enabled": true,
+        "webhook_url": "https://hooks.slack.com/services/wellness-webhook",
+        "channel": "#wellness"
+      }
+    }
+  ],
+  "sound": true,
+  "sound_file": "/home/user/sounds/default.wav",
+  "slack": {
+    "enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/default-webhook",
+    "channel": "#general"
+  }
+}
+```
+
+In this example:
+- **standup** plays `/home/user/sounds/urgent.wav` and posts to `#standup-alerts`
+- **water** has sound disabled and posts to `#wellness`
+- All other reminders use the global defaults
 
 ### Slack Object
 
