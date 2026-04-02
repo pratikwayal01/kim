@@ -71,14 +71,22 @@ if ($local) {
     
     # Extract zip — GitHub zip contains a kim-main/ subfolder
     if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force }
-    Expand-Archive -Path $zipPath -DestinationPath $extractPath
+    Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
     Ok "Extracted package"
     
-    # Find the actual source folder (kim-main/ inside the extracted zip)
-    $srcDir = Join-Path $extractPath "kim-main"
-    if (-not (Test-Path $srcDir)) {
-        # Fallback: maybe it extracted directly
+    # Find the actual source folder — GitHub zip extracts to kim-main/ inside the extract path
+    $srcDir = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
+    if (-not $srcDir) {
         $srcDir = $extractPath
+    } else {
+        $srcDir = $srcDir.FullName
+    }
+    
+    Write-Host "  Source: $srcDir" -ForegroundColor Gray
+    
+    # Verify files exist before copying
+    if (-not (Test-Path "$srcDir\kim.py")) {
+        Err "kim.py not found in $srcDir — extracted contents: $(Get-ChildItem $srcDir | ForEach-Object { $_.Name } | Sort-Object)"
     }
     
     # Copy kim.py and kim/ folder to install directory
