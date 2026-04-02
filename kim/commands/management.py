@@ -44,7 +44,7 @@ def cmd_add(args):
         sys.exit(1)
 
     print(f"{CHECK} Added reminder '{name}' (every {interval_str})")
-    log.info(f"Added reminder: {name}")
+    log.info("Added reminder: %s", name)
 
 
 def cmd_remove(args):
@@ -69,7 +69,7 @@ def cmd_remove(args):
         sys.exit(1)
 
     print(f"{CHECK} Removed reminder '{name}'")
-    log.info(f"Removed reminder: {name}")
+    log.info("Removed reminder: %s", name)
 
 
 def cmd_enable(args):
@@ -97,7 +97,7 @@ def cmd_enable(args):
         sys.exit(1)
 
     print(f"{CHECK} Enabled reminder '{name}'")
-    log.info(f"Enabled reminder: {name}")
+    log.info("Enabled reminder: %s", name)
 
 
 def cmd_disable(args):
@@ -125,7 +125,7 @@ def cmd_disable(args):
         sys.exit(1)
 
     print(f"{CHECK} Disabled reminder '{name}'")
-    log.info(f"Disabled reminder: {name}")
+    log.info("Disabled reminder: %s", name)
 
 
 def cmd_update(args):
@@ -144,10 +144,10 @@ def cmd_update(args):
                 r["message"] = args.message
             if args.urgency is not None:
                 r["urgency"] = args.urgency
-            if args.enable is not None:
-                r["enabled"] = args.enable
-            if args.disable is not None:
-                r["enabled"] = not args.disable
+            if args.enable:
+                r["enabled"] = True
+            if args.disable:
+                r["enabled"] = False
             break
 
     if not found:
@@ -164,4 +164,4 @@ def cmd_update(args):
         sys.exit(1)
 
     print(f"{CHECK} Updated reminder '{name}'")
-    log.info(f"Updated reminder: {name}")
+    log.info("Updated reminder: %s", name)
