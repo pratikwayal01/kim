@@ -69,8 +69,8 @@ def cmd_start(args):
         interval = r.get("interval") or r.get("interval_minutes", 30)
         interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
         print(f"  {BULLET} {r['name']:<20} every {interval_str}")
-    if sound_file:
-        print(f"  Sound: {sound_file}")
+    if global_sound_file:
+        print(f"  Sound: {global_sound_file}")
     print(f"Log: {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}")
 
     log.info("kim v%s started %s PID %s", VERSION, EM_DASH, os.getpid())

@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -75,6 +76,11 @@ def cmd_remind(args):
     oneshots.append(oneshot)
     try:
         ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(ONESHOT_FILE, 0o600)
+            except OSError:
+                pass
         log.debug("Saved one-shot reminder to %s", ONESHOT_FILE)
     except OSError as e:
         log.warning("Could not save one-shot reminder: %s", e)
@@ -109,6 +115,14 @@ def cmd_remind(args):
     pid = os.fork()
     if pid > 0:
         return
+
+    # Detach from parent session and reset signal handlers
+    try:
+        os.setsid()
+    except OSError:
+        pass
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     try:
         config = load_config()
@@ -167,7 +181,7 @@ def load_oneshot_reminders():
             # Clean up expired oneshots
             ONESHOT_FILE.write_text(json.dumps(valid, indent=2), encoding="utf-8")
             log.info(
-                f"Cleaned up {len(oneshots) - len(valid)} expired one-shot reminders"
+                "Cleaned up %d expired one-shot reminders", len(oneshots) - len(valid)
             )
         return valid
     except (json.JSONDecodeError, OSError) as e:

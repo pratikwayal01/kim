@@ -218,10 +218,13 @@ def cmd_uninstall(args):
     system = platform.system()
 
     if system == "Linux":
-        subprocess.run(
-            ["systemctl", "--user", "disable", "--now", "kim.service"],
-            capture_output=True,
-        )
+        try:
+            subprocess.run(
+                ["systemctl", "--user", "disable", "--now", "kim.service"],
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            pass
         service_path = Path.home() / ".config/systemd/user/kim.service"
         if service_path.exists():
             service_path.unlink()
@@ -229,27 +232,30 @@ def cmd_uninstall(args):
     elif system == "Darwin":
         plist = Path.home() / "Library/LaunchAgents/io.kim.reminder.plist"
         if plist.exists():
-            subprocess.run(["launchctl", "unload", str(plist)], capture_output=True)
+            try:
+                subprocess.run(["launchctl", "unload", str(plist)], capture_output=True)
+            except FileNotFoundError:
+                pass
             plist.unlink()
             print("Removed launchd plist.")
     elif system == "Windows":
-        # Must invoke via powershell.exe, NOT shell=True (cmd.exe).
-        # shell=True routes through cmd.exe which cannot parse $false or
-        # PowerShell cmdlets, causing output to leak even with capture_output.
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Unregister-ScheduledTask -TaskName KimReminder -Confirm:$false"
-                " -ErrorAction SilentlyContinue",
-            ],
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            print("Removed scheduled task.")
-        else:
+        try:
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Unregister-ScheduledTask -TaskName KimReminder -Confirm:$false"
+                    " -ErrorAction SilentlyContinue",
+                ],
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                print("Removed scheduled task.")
+            else:
+                print("No scheduled task found (or already removed).")
+        except FileNotFoundError:
             print("No scheduled task found (or already removed).")
 
     # Release the log file handle before wiping KIM_DIR.

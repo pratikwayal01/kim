@@ -174,7 +174,11 @@ def cmd_interactive(args):
                 return
 
         try:
-            interval = int(input("Interval (minutes): ").strip())
+            interval_input = input("Interval (minutes): ").strip()
+            interval = int(interval_input)
+            if interval <= 0:
+                print("Interval must be positive.")
+                return
         except ValueError:
             print("Invalid interval.")
             return
@@ -189,7 +193,7 @@ def cmd_interactive(args):
 
         new_reminder = {
             "name": name,
-            "interval": interval,
+            "interval": f"{interval}m",
             "title": title or f"Reminder: {name}",
             "message": message or "Time for a reminder!",
             "urgency": urgency,
