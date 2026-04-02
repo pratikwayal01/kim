@@ -63,20 +63,27 @@ if ($local) {
     Info "Downloading kim package..."
     $zipUrl = "https://github.com/pratikwayal01/kim/archive/refs/heads/main.zip"
     $zipPath = "$env:TEMP\kim-main.zip"
-    $extractPath = "$env:TEMP\kim-main"
+    $extractPath = "$env:TEMP\kim-extract"
     
     # Download zip
     Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
     Ok "Downloaded package"
     
-    # Extract zip
+    # Extract zip — GitHub zip contains a kim-main/ subfolder
     if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force }
     Expand-Archive -Path $zipPath -DestinationPath $extractPath
     Ok "Extracted package"
     
-     # Copy kim.py and kim/ folder to install directory
-     Copy-Item "$extractPath\kim\kim.py" -Destination $KimDir -Force
-     Copy-Item "$extractPath\kim\kim" -Destination $KimDir -Recurse -Force
+    # Find the actual source folder (kim-main/ inside the extracted zip)
+    $srcDir = Join-Path $extractPath "kim-main"
+    if (-not (Test-Path $srcDir)) {
+        # Fallback: maybe it extracted directly
+        $srcDir = $extractPath
+    }
+    
+    # Copy kim.py and kim/ folder to install directory
+    Copy-Item "$srcDir\kim.py" -Destination $KimDir -Force
+    Copy-Item "$srcDir\kim" -Destination $KimDir -Recurse -Force
     Ok "Installed to $KimDir"
     
     # Cleanup
