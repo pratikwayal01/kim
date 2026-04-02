@@ -31,6 +31,17 @@ def cmd_add(args):
         "enabled": True,
     }
 
+    if args.sound_file:
+        new_reminder["sound_file"] = args.sound_file
+
+    if args.slack_channel or args.slack_webhook:
+        new_reminder["slack"] = {
+            "enabled": True,
+            "channel": args.slack_channel or "#general",
+        }
+        if args.slack_webhook:
+            new_reminder["slack"]["webhook_url"] = args.slack_webhook
+
     config.setdefault("reminders", []).append(new_reminder)
 
     try:

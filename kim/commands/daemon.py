@@ -37,22 +37,22 @@ def cmd_start(args):
             PID_FILE.unlink(missing_ok=True)
 
     config = load_config()
-    sound = config.get("sound", True)
-    sound_file = config.get("sound_file") or None
-    slack_config = config.get("slack", {})
+    global_sound = config.get("sound", True)
+    global_sound_file = config.get("sound_file") or None
+    global_slack = config.get("slack", {})
     active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
 
     if not active:
         print("No enabled reminders in config. Edit ~/.kim/config.json")
         sys.exit(0)
 
-    # Validate sound_file at startup so users get an early warning
-    if sound and sound_file:
-        ok, err = validate_sound_file(sound_file)
+    # Validate global sound_file at startup so users get an early warning
+    if global_sound and global_sound_file:
+        ok, err = validate_sound_file(global_sound_file)
         if not ok:
             print(f"{WARNING} Warning: sound_file problem {EM_DASH} {err}")
             print("  Falling back to system default sound.")
-            sound_file = None
+            global_sound_file = None
 
     try:
         pid_tmp = PID_FILE.with_suffix(".tmp")
@@ -75,13 +75,29 @@ def cmd_start(args):
 
     log.info("kim v%s started %s PID %s", VERSION, EM_DASH, os.getpid())
 
-    # ── Build a notifier that uses KIM's existing notify() with sound + slack ──
-    _slack = slack_config if slack_config.get("enabled") else None
+    # ── Build a notifier that uses KIM's existing notify() with per-reminder sound + slack ──
 
     def kim_notifier(reminder: dict) -> None:
         # Check if this is a one-shot reminder (has _oneshot_fire_at)
         is_oneshot = "_oneshot_fire_at" in reminder
         fire_at = reminder.get("_oneshot_fire_at")
+
+        # Per-reminder sound override (falls back to global)
+        r_sound = reminder.get("sound")
+        sound = r_sound if r_sound is not None else global_sound
+
+        # Per-reminder sound_file override (falls back to global)
+        r_sound_file = reminder.get("sound_file")
+        sound_file = r_sound_file if r_sound_file else global_sound_file
+
+        # Per-reminder slack override (falls back to global)
+        r_slack = reminder.get("slack")
+        if r_slack and r_slack.get("enabled"):
+            slack_config = r_slack
+        elif global_slack.get("enabled"):
+            slack_config = global_slack
+        else:
+            slack_config = None
 
         notify(
             title=reminder.get("title", "Reminder"),
@@ -89,7 +105,7 @@ def cmd_start(args):
             urgency=reminder.get("urgency", "normal"),
             sound=sound,
             sound_file=sound_file,
-            slack_config=_slack,
+            slack_config=slack_config,
         )
         log.info("[%s] fired", reminder.get("name"))
 
@@ -124,7 +140,7 @@ def cmd_start(args):
             ),
             urgency="low",
             sound=False,
-            slack_config=_slack,
+            slack_config=global_slack if global_slack.get("enabled") else None,
         )
     except Exception:
         log.exception("Startup notification failed")

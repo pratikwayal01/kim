@@ -106,6 +106,18 @@ logs:   ~/.kim/kim.log
         default="normal",
         help="Urgency level",
     )
+    add_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    add_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    add_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
+    add_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    add_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    add_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
+    add_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    add_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    add_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
+    add_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    add_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    add_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
 
     remove_p = sub.add_parser("remove", help="Remove a reminder")
     remove_p.add_argument("name", help="Reminder name")
@@ -131,6 +143,12 @@ logs:   ~/.kim/kim.log
     )
     update_p.add_argument("--enable", action="store_true", help="Enable the reminder")
     update_p.add_argument("--disable", action="store_true", help="Disable the reminder")
+    update_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    update_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    update_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
+    update_p.add_argument("--sound-file", help="Per-reminder sound file path")
+    update_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
+    update_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
 
     remind_p = sub.add_parser("remind", help="Fire a one-shot reminder after a delay")
     remind_p.add_argument("message", help="Reminder message")
