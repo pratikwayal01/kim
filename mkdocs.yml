@@ -21,7 +21,10 @@ theme:
     - content.code.copy
 
 plugins:
-  - search
+  - search:
+      lang:
+        - en
+      separator: '[\s\-,:!=\[\]()"\/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
 
 markdown_extensions:
   - pymdownx.highlight:
