@@ -1,50 +1,112 @@
-# kim Wiki Update
+# kim Wiki
 
-## Latest Changes (v2.1.0 -> Refactoring)
+## Overview
 
-### Modular Package Structure
+kim (keep in mind) is a lightweight cross-platform reminder daemon for developers. No UI. Config-driven. Runs in the background.
 
-The codebase has been refactored from two monolithic Python files (`kim.py` and `kim_scheduler.py`) into a modular package structure with multiple folders:
+**Documentation:** [https://pratikwayal01.github.io/kim/](https://pratikwayal01.github.io/kim/)
+
+---
+
+## Package Structure
 
 ```
 kim/
 ├── __init__.py
 ├── __main__.py
 ├── cli.py              # CLI argument parsing and command dispatch
-├── core.py             # Config, paths, logging, constants
+├── core.py             # Config, paths, logging, interval parser
 ├── notifications.py    # Platform-specific notifications and Slack
 ├── sound.py            # Sound playback and validation
-├── scheduler.py        # Heapq scheduler (moved from kim_scheduler.py)
-├── interactive.py      # Interactive mode with TUI
+├── scheduler.py        # Heapq-based single-thread scheduler
+├── interactive.py      # Interactive TUI mode
 ├── selfupdate.py       # Self-update and uninstall commands
 ├── utils.py            # Cross-platform symbols and utilities
 └── commands/
-    ├── config.py       # Config-related commands
-    ├── daemon.py       # Daemon management
-    ├── management.py   # Reminder management
-    └── misc.py         # Miscellaneous commands
+    ├── config.py       # Config-related commands (edit, list, logs, validate, export, import)
+    ├── daemon.py       # Daemon management (start, stop, status)
+    ├── management.py   # Reminder management (add, remove, enable, disable, update)
+    └── misc.py         # Miscellaneous commands (remind, slack, sound, completion)
 ```
 
-### Key Improvements
+## File Locations
 
-1. **Cross-Platform Compatibility**: Added ASCII fallbacks for Unicode symbols on Windows (✓→OK, ●→*, ○→o, etc.)
-2. **Testing**: Added unit tests and GitHub Actions CI/CD pipeline that runs tests on Windows, macOS, and Linux
-3. **Documentation**: Comprehensive documentation in `docs/` folder, deployable to GitHub Pages
-4. **Build Process**: Updated build workflow to run tests before building binaries
+| File | Purpose |
+|---|---|
+| `~/.kim/config.json` | Main configuration (reminders, sound, Slack) |
+| `~/.kim/oneshots.json` | Persisted one-shot reminders (survives reboots) |
+| `~/.kim/kim.log` | Log file (rotated, max 5 MB × 3 backups) |
+| `~/.kim/kim.pid` | Daemon PID file |
 
-### New Features
+## Key Features
 
-- **Interactive Mode**: Text-based UI for managing reminders (`kim interactive` or `kim -i`)
-- **One-shot Reminders**: `kim remind "standup" in 10m`
-- **Self-update**: `kim self-update` checks GitHub releases
+- **Cross-platform**: Linux (systemd), macOS (launchd), Windows (Task Scheduler)
+- **Pure Python stdlib** — no pip installs, no third-party dependencies
+- **Low memory**: All reminders run on a single `heapq` scheduler thread (~0.02 MB flat)
+- **Config-driven**: JSON configuration file with auto-creation of defaults
+- **Notifications**: System notifications via native APIs (notify-send / osascript / PowerShell)
+- **Sound**: Custom sound files or system default
+- **Slack integration**: Webhook or bot token
+- **One-shot reminders**: `kim remind "standup" in 10m` — persisted to disk, survives reboots
+- **Interactive mode**: TUI for managing reminders
+- **Self-update**: Automatic updates from GitHub releases
 - **Export/Import**: JSON and CSV support
-- **Config Validation**: `kim validate`
-- **Slack Integration**: Webhook and bot token support
-- **Custom Sound Files**: wav, mp3, ogg, flac, aiff, m4a
 
-### Installation
+## One-shot Reminders
 
-Same as before:
+One-shot reminders are created via `kim remind` and stored in `~/.kim/oneshots.json`. They are:
+
+- **Persistent** — survive daemon restarts and system reboots
+- **Auto-loaded** — daemon loads pending one-shots on startup
+- **Auto-cleaned** — expired reminders are removed on next startup
+- **Single-fire** — removed from persistence after firing
+
+### Time Format
+
+Supports: `10m`, `1h`, `2h 30m`, `90s`, or bare numbers (treated as minutes).
+
+### Windows Performance
+
+On Windows, one-shot reminders spawn Python directly via `sys.executable -m kim _remind-fire` with `CREATE_NO_WINDOW`, avoiding the PowerShell overhead that would add 1-2s of interpreter startup time before the actual sleep begins.
+
+## Configuration
+
+Configuration is stored in `~/.kim/config.json`. Missing optional fields are filled with documented defaults automatically.
+
+```json
+{
+  "reminders": [
+    {
+      "name": "eye-break",
+      "interval": "30m",
+      "title": "[eye] Eye Break",
+      "message": "Look 20 feet away for 20 seconds. Blink slowly.",
+      "urgency": "critical",
+      "enabled": true
+    }
+  ],
+  "sound": true,
+  "sound_file": null,
+  "slack": {
+    "enabled": false,
+    "webhook_url": "",
+    "bot_token": "",
+    "channel": "#general"
+  }
+}
+```
+
+### Interval Format
+
+Accepts: integers (minutes), or strings like `"30m"`, `"2h"`, `"1d"`, `"90s"`. The legacy field `interval_minutes` is still supported for backward compatibility.
+
+### Security
+
+- Config file permissions are set to `600` on Unix (readable only by owner)
+- Slack webhook URLs and bot tokens never appear in logs
+- PID file is written atomically (tmp + rename) with `600` permissions
+
+## Installation
 
 **Linux / macOS**
 ```bash
@@ -56,46 +118,40 @@ curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh |
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
 ```
 
-### Configuration
+## CLI Commands
 
-Configuration remains in `~/.kim/config.json`. Example:
-
-```json
-{
-  "reminders": [
-    {
-      "name": "eye-break",
-      "interval_minutes": "30m",
-      "title": "👁️ Eye Break",
-      "message": "Look 20 feet away for 20 seconds. Blink slowly.",
-      "urgency": "critical",
-      "enabled": true
-    }
-  ],
-  "sound": true,
-  "slack": {
-    "enabled": false,
-    "webhook_url": "",
-    "bot_token": "",
-    "channel": "#general"
-  }
-}
+```
+kim start          Start the daemon
+kim stop           Stop the daemon
+kim status         Show status and active reminders
+kim list           List all reminders from config
+kim logs           Show recent log entries
+kim edit           Open config in $EDITOR
+kim add            Add a new reminder
+kim remove         Remove a reminder
+kim enable         Enable a reminder
+kim disable        Disable a reminder
+kim update         Update a reminder
+kim remind         Fire a one-shot reminder after a delay
+kim interactive    Enter interactive mode (alias: -i)
+kim self-update    Check for and install updates
+kim uninstall      Uninstall kim completely
+kim export         Export reminders to file
+kim import         Import reminders from file
+kim validate       Validate config file
+kim slack          Slack notification settings
+kim sound          Manage the notification sound file
+kim completion     Generate shell completions
 ```
 
-### Documentation
+## Logging
 
-Full documentation is available in the `docs/` folder and can be viewed as a website via GitHub Pages:
+- Log file: `~/.kim/kim.log`
+- Rotation: 5 MB max per file, 3 backups retained
+- Uses `%-formatting` for lazy evaluation (no string formatting when log level is suppressed)
+- Falls back to stderr if log file is unwritable
 
-- [Home](docs/index.md)
-- [Installation](docs/installation.md)
-- [Configuration](docs/configuration.md)
-- [Commands](docs/commands.md)
-- [Sound](docs/sound.md)
-- [Slack](docs/slack.md)
-- [Development](docs/development.md)
-- [Changelog](docs/changelog.md)
-
-### Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -103,7 +159,7 @@ Full documentation is available in the `docs/` folder and can be viewed as a web
 4. Run tests: `python -m unittest discover -s tests -v`
 5. Submit a pull request
 
-### Links
+## Links
 
 - [GitHub Repository](https://github.com/pratikwayal01/kim)
 - [Issue Tracker](https://github.com/pratikwayal01/kim/issues)
@@ -111,4 +167,4 @@ Full documentation is available in the `docs/` folder and can be viewed as a web
 
 ---
 
-*To update the wiki, copy the relevant sections above into the appropriate wiki pages.*
+*Start small. Keep it in mind.*
