@@ -193,8 +193,10 @@ def cmd_import(args):
             config = imported_data
             action = "Imported"
 
-        with open(CONFIG, "w") as f:
+        with open(CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
+        if platform.system() != "Windows":
+            os.chmod(CONFIG, 0o600)
 
         print(f"{CHECK} {action} {len(imported_data.get('reminders', []))} reminder(s)")
 

@@ -199,15 +199,17 @@ def cmd_interactive(args):
         config.setdefault("reminders", []).append(new_reminder)
 
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"\nError writing config file: {e}")
             time.sleep(2)
             return
 
         print(f"\n{CHECK} Added reminder '{name}'")
-        log.info(f"Added reminder via interactive: {name}")
+        log.info("Added reminder via interactive: %s", name)
         time.sleep(1)
 
     def edit_reminder():
@@ -258,8 +260,10 @@ def cmd_interactive(args):
             r["urgency"] = new_urgency
 
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"\nError writing config file: {e}")
             time.sleep(2)
@@ -295,8 +299,10 @@ def cmd_interactive(args):
         r["enabled"] = not r.get("enabled", True)
 
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"\nError writing config file: {e}")
             time.sleep(2)
@@ -334,8 +340,10 @@ def cmd_interactive(args):
         config["reminders"].pop(choice)
 
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"\nError writing config file: {e}")
             time.sleep(2)
