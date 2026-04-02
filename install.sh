@@ -22,6 +22,55 @@ KIM_DIR="$HOME/.kim"
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
+# ── --uninstall flag (works even when kim binary is broken) ────────────────────
+if [[ "${1:-}" == "--uninstall" ]]; then
+    _header "Uninstalling kim"
+    printf "This will remove kim data, binaries, and autostart config.\nContinue? (y/N): "
+    read -r confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
+
+    # Stop any running daemon
+    if [[ -f "$KIM_DIR/kim.pid" ]]; then
+        pid=$(cat "$KIM_DIR/kim.pid" 2>/dev/null || true)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+            _ok "Stopped running daemon (PID $pid)"
+        fi
+        rm -f "$KIM_DIR/kim.pid"
+    fi
+
+    # Remove autostart
+    case "$OS" in
+        Linux)
+            systemctl --user stop kim.service 2>/dev/null || true
+            systemctl --user disable kim.service 2>/dev/null || true
+            systemctl --user daemon-reload 2>/dev/null || true
+            rm -f "$HOME/.config/systemd/user/kim.service"
+            _ok "Removed systemd service"
+            ;;
+        Darwin)
+            plist="$HOME/Library/LaunchAgents/io.kim.reminder.plist"
+            launchctl unload "$plist" 2>/dev/null || true
+            rm -f "$plist"
+            _ok "Removed launchd agent"
+            ;;
+    esac
+
+    # Remove binary shim
+    rm -f "$BIN_DIR/kim"
+    _ok "Removed $BIN_DIR/kim"
+
+    # Remove data directory
+    rm -rf "$KIM_DIR"
+    _ok "Removed $KIM_DIR"
+
+    _header "Done"
+    echo -e "${GREEN}kim has been completely uninstalled.${NC}"
+    exit 0
+fi
+
 _header "kim — keep in mind"
 _info "OS     : $OS ($ARCH)"
 _info "Install: $BIN_DIR/kim"
@@ -76,6 +125,10 @@ fi
 # ── Download kim package and wrapper ──────────────────────────────────────────
 _header "Installing kim"
 mkdir -p "$BIN_DIR" "$KIM_DIR"
+
+# Clean stale state so re-runs after failures always work
+rm -rf "$KIM_DIR/kim"
+rm -f "$KIM_DIR/kim.py"
 
 if [[ "${KIM_LOCAL:-0}" == "1" ]]; then
     # Local mode: used when running from cloned repo
@@ -150,6 +203,11 @@ _header "Setting up autostart"
 case "$OS" in
 # ── Linux: systemd user service ───────────────────────────────────────────────
 Linux)
+    if ! command -v systemctl &>/dev/null; then
+        _warn "systemctl not found — skipping autostart setup"
+        _warn "Run 'kim start' manually to start the daemon"
+        break
+    fi
     SERVICE_DIR="$HOME/.config/systemd/user"
     mkdir -p "$SERVICE_DIR"
     UID_NUM=$(id -u)
@@ -173,15 +231,16 @@ WorkingDirectory=$KIM_DIR
 WantedBy=default.target
 EOF
 
-    systemctl --user daemon-reload
-    systemctl --user enable kim.service
-    systemctl --user restart kim.service
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable kim.service 2>/dev/null || true
+    systemctl --user restart kim.service 2>/dev/null || true
     sleep 1
 
-    if systemctl --user is-active --quiet kim.service; then
+    if systemctl --user is-active --quiet kim.service 2>/dev/null; then
         _ok "systemd service running"
     else
         _warn "Service may have failed: systemctl --user status kim.service"
+        _warn "You can still run 'kim start' manually"
     fi
     ;;
 
@@ -216,8 +275,10 @@ Darwin)
 EOF
 
     launchctl unload "$PLIST" 2>/dev/null || true
-    launchctl load "$PLIST"
-    _ok "launchd agent loaded"
+    launchctl load "$PLIST" 2>/dev/null || {
+        _warn "launchctl load failed — try: launchctl load $PLIST"
+    }
+    _ok "launchd agent configured"
     ;;
 esac
 
