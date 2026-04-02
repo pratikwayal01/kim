@@ -29,6 +29,10 @@ def cmd_selfupdate(args):
             data = json.loads(response.read().decode())
             latest_version = data.get("tag_name", "").lstrip("v")
 
+            if not latest_version:
+                print("Could not determine latest version from GitHub API.")
+                return
+
             if latest_version == VERSION:
                 print(f"You're running the latest version ({VERSION}).")
                 return

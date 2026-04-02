@@ -16,8 +16,28 @@ except ImportError:
     tty = None
     termios = None
 
-from .core import CONFIG, PID_FILE, load_config, log
+from .core import CONFIG, PID_FILE, load_config, log, parse_interval
 from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT, CIRCLE_OPEN, CIRCLE_FILLED
+
+
+def _save_config(config: dict) -> bool:
+    """
+    Atomically write config to disk (tmp → rename).
+    Returns True on success, False on failure (after printing an error).
+    """
+    try:
+        tmp = CONFIG.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(tmp, 0o600)
+            except OSError:
+                pass
+        tmp.replace(CONFIG)
+        return True
+    except OSError as e:
+        print(f"\nError writing config file: {e}")
+        return False
 
 
 def _enable_windows_ansi() -> None:
@@ -153,8 +173,13 @@ def cmd_interactive(args):
             print(HLINE * 55)
             for r in reminders:
                 enabled = CHECK if r.get("enabled", True) else MIDDOT
+                iv = r.get("interval")
+                if iv is None:
+                    iv = f"{r.get('interval_minutes', 30)} min"
+                elif isinstance(iv, (int, float)):
+                    iv = f"{iv} min"
                 print(
-                    f"{r['name']:<20} {str(r.get('interval') or r.get('interval_minutes', 30)) + ' min':>10}   {r.get('urgency', 'normal'):<10} {enabled}"
+                    f"{r['name']:<20} {str(iv):>10}   {r.get('urgency', 'normal'):<10} {enabled}"
                 )
         print("\nPress Enter to continue...")
         input()
@@ -173,15 +198,24 @@ def cmd_interactive(args):
                 print(f"Reminder '{name}' already exists.")
                 return
 
-        try:
-            interval_input = input("Interval (minutes): ").strip()
-            interval = int(interval_input)
-            if interval <= 0:
-                print("Interval must be positive.")
-                return
-        except ValueError:
-            print("Invalid interval.")
+        interval_input = input("Interval (e.g. 30m, 1h, 1d): ").strip()
+        if not interval_input:
+            print("Interval is required.")
             return
+        _iv = interval_input.lower()
+        # Normalise: bare number → minutes suffix
+        if any(_iv.endswith(u) for u in ("m", "h", "d", "s")):
+            interval_str = _iv
+        else:
+            try:
+                n = int(_iv)
+                if n <= 0:
+                    print("Interval must be positive.")
+                    return
+                interval_str = f"{n}m"
+            except ValueError:
+                print("Invalid interval. Use e.g. 30m, 1h, 1d, 90s.")
+                return
 
         title = input("Title (optional, press Enter for default): ").strip()
         message = input("Message (optional): ").strip()
@@ -193,7 +227,7 @@ def cmd_interactive(args):
 
         new_reminder = {
             "name": name,
-            "interval": f"{interval}m",
+            "interval": interval_str,
             "title": title or f"Reminder: {name}",
             "message": message or "Time for a reminder!",
             "urgency": urgency,
@@ -202,13 +236,7 @@ def cmd_interactive(args):
 
         config.setdefault("reminders", []).append(new_reminder)
 
-        try:
-            with open(CONFIG, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            if platform.system() != "Windows":
-                os.chmod(CONFIG, 0o600)
-        except OSError as e:
-            print(f"\nError writing config file: {e}")
+        if not _save_config(config):
             time.sleep(2)
             return
 
@@ -268,13 +296,7 @@ def cmd_interactive(args):
         if new_urgency in ["low", "normal", "critical"]:
             r["urgency"] = new_urgency
 
-        try:
-            with open(CONFIG, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            if platform.system() != "Windows":
-                os.chmod(CONFIG, 0o600)
-        except OSError as e:
-            print(f"\nError writing config file: {e}")
+        if not _save_config(config):
             time.sleep(2)
             return
 
@@ -307,13 +329,7 @@ def cmd_interactive(args):
         r = reminders[choice]
         r["enabled"] = not r.get("enabled", True)
 
-        try:
-            with open(CONFIG, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            if platform.system() != "Windows":
-                os.chmod(CONFIG, 0o600)
-        except OSError as e:
-            print(f"\nError writing config file: {e}")
+        if not _save_config(config):
             time.sleep(2)
             return
 
@@ -348,13 +364,7 @@ def cmd_interactive(args):
 
         config["reminders"].pop(choice)
 
-        try:
-            with open(CONFIG, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            if platform.system() != "Windows":
-                os.chmod(CONFIG, 0o600)
-        except OSError as e:
-            print(f"\nError writing config file: {e}")
+        if not _save_config(config):
             time.sleep(2)
             return
 

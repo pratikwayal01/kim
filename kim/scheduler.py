@@ -229,26 +229,9 @@ class KimScheduler:
         self._wakeup.set()
         log.info("Added one-shot reminder %r (fires at %s)", name, time.ctime(fire_at))
 
-    def _oneshot_remove(self, name: str) -> None:
-        """Remove a one-shot reminder after it fires."""
-        with self._lock:
-            event = self._live.pop(name, None)
-            if event:
-                event.cancelled = True
-        log.info("Removed one-shot reminder %r", name)
-
     def update_reminder(self, reminder: dict) -> None:
         """Update an existing reminder in place (kim update)."""
         self.add_reminder(reminder)  # add_reminder handles replacement
-
-    def enable_reminder(self, name: str) -> bool:
-        """Re-enable a previously disabled reminder (kim enable)."""
-        with self._lock:
-            event = self._live.get(name)
-            if event is None:
-                return False
-            event.reminder["enabled"] = True
-        return True
 
     def disable_reminder(self, name: str) -> bool:
         """Disable a reminder without removing it (kim disable)."""
@@ -287,20 +270,19 @@ class KimScheduler:
                     # Drain cancelled events from the top of the heap
                     while self._heap and self._heap[0].cancelled:
                         heapq.heappop(self._heap)
-                    # Snapshot next fire time and one-shot presence without
-                    # holding the lock for the slow any() scan below.
                     next_fire = self._heap[0].fire_at if self._heap else None
-                    heap_snapshot = list(self._heap)
+                    # Check for one-shots while holding the lock so we read
+                    # live cancelled flags, not a stale snapshot.
+                    has_oneshot = any(
+                        "_oneshot_fire_at" in e.reminder
+                        for e in self._heap
+                        if not e.cancelled
+                    )
 
                 if next_fire is None:
                     sleep_for = self._IDLE_SLEEP
                 else:
                     time_until_next = max(0.0, next_fire - time.time())
-                    has_oneshot = any(
-                        "_oneshot_fire_at" in e.reminder
-                        for e in heap_snapshot
-                        if not e.cancelled
-                    )
                     if has_oneshot:
                         sleep_for = min(time_until_next, self._ONESHOT_CHECK_SLEEP)
                     else:

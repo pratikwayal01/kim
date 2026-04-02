@@ -240,10 +240,13 @@ def _notify_slack_webhook(title: str, message: str, webhook_url: str) -> None:
         )
         urllib.request.urlopen(req, timeout=10)
         log.debug("Slack webhook notification sent")
+    except urllib.error.HTTPError as e:
+        # Do NOT log webhook_url — it is a secret
+        log.error("Slack webhook HTTP error: %s %s", e.code, e.reason)
     except urllib.error.URLError as e:
-        log.error("Slack webhook error: %s", e)
+        log.error("Slack webhook network error: %s", e.reason)
     except Exception as e:
-        log.error("Slack webhook failed: %s", e)
+        log.error("Slack webhook failed: %s", type(e).__name__)
 
 
 def _notify_slack_bot(
@@ -270,12 +273,15 @@ def _notify_slack_bot(
             data=data,
             headers={
                 "Content-Type": "application/json",
+                # bot_token deliberately not logged anywhere
                 "Authorization": f"Bearer {bot_token}",
             },
         )
         urllib.request.urlopen(req, timeout=10)
         log.debug("Slack bot notification sent")
+    except urllib.error.HTTPError as e:
+        log.error("Slack bot HTTP error: %s %s", e.code, e.reason)
     except urllib.error.URLError as e:
-        log.error("Slack bot error: %s", e)
+        log.error("Slack bot network error: %s", e.reason)
     except Exception as e:
-        log.error("Slack bot failed: %s", e)
+        log.error("Slack bot failed: %s", type(e).__name__)

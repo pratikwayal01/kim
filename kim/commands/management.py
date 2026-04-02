@@ -6,10 +6,32 @@ import json
 import os
 import platform
 import sys
-from pathlib import Path
 
 from ..core import CONFIG, load_config, log
 from ..utils import CHECK
+
+# CREATE_NO_WINDOW flag used when spawning subprocesses on Windows
+_CREATE_NO_WINDOW = 0x08000000
+
+
+def _save_config(config: dict) -> None:
+    """
+    Atomically write config to disk.
+    Writes to a .tmp file first, then renames to avoid partial-write corruption.
+    Raises SystemExit(1) on failure.
+    """
+    try:
+        tmp = CONFIG.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(tmp, 0o600)
+            except OSError:
+                pass
+        tmp.replace(CONFIG)
+    except OSError as e:
+        print(f"Error writing config file: {e}")
+        sys.exit(1)
 
 
 def cmd_add(args):
@@ -43,16 +65,7 @@ def cmd_add(args):
             new_reminder["slack"]["webhook_url"] = args.slack_webhook
 
     config.setdefault("reminders", []).append(new_reminder)
-
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        # Ensure config file permissions are secure
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
+    _save_config(config)
 
     print(f"{CHECK} Added reminder '{name}' (every {interval_str})")
     log.info("Added reminder: %s", name)
@@ -70,15 +83,7 @@ def cmd_remove(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
-
+    _save_config(config)
     print(f"{CHECK} Removed reminder '{name}'")
     log.info("Removed reminder: %s", name)
 
@@ -98,15 +103,7 @@ def cmd_enable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
-
+    _save_config(config)
     print(f"{CHECK} Enabled reminder '{name}'")
     log.info("Enabled reminder: %s", name)
 
@@ -126,15 +123,7 @@ def cmd_disable(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
-
+    _save_config(config)
     print(f"{CHECK} Disabled reminder '{name}'")
     log.info("Disabled reminder: %s", name)
 
@@ -165,14 +154,6 @@ def cmd_update(args):
         print(f"Reminder '{name}' not found.")
         sys.exit(1)
 
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
-
+    _save_config(config)
     print(f"{CHECK} Updated reminder '{name}'")
     log.info("Updated reminder: %s", name)

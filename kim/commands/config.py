@@ -13,6 +13,25 @@ from ..core import CONFIG, LOG_FILE, load_config, log
 from ..utils import CHECK, MIDDOT, HLINE
 
 
+def _save_config(config: dict) -> None:
+    """
+    Atomically write config to disk (write .tmp then rename).
+    Raises SystemExit(1) on failure.
+    """
+    try:
+        tmp = CONFIG.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(tmp, 0o600)
+            except OSError:
+                pass
+        tmp.replace(CONFIG)
+    except OSError as e:
+        print(f"Error writing config file: {e}")
+        sys.exit(1)
+
+
 def cmd_edit(args):
     load_config()  # ensure config exists
     editor = os.environ.get("EDITOR")
@@ -75,30 +94,14 @@ def cmd_logs(args):
 
 
 def cmd_validate(args):
+    # Read the raw file directly so JSONDecodeError is catchable.
+    # load_config() silently swallows parse errors and returns a default.
+    if not CONFIG.exists():
+        print("Config file not found. Run 'kim start' to create it.")
+        sys.exit(1)
     try:
-        config = load_config()
-
-        if "reminders" not in config:
-            print("Warning: No 'reminders' key found in config.")
-
-        reminders = config.get("reminders", [])
-        for r in reminders:
-            if "name" not in r:
-                print("Error: Reminder missing 'name' field.")
-                sys.exit(1)
-            # Accept both 'interval' and 'interval_minutes' (legacy)
-            interval_val = r.get("interval") or r.get("interval_minutes")
-            if interval_val is None:
-                print(f"Error: Reminder '{r.get('name')}' missing 'interval' field.")
-                sys.exit(1)
-            if isinstance(interval_val, str):
-                pass
-            elif not isinstance(interval_val, (int, float)) or interval_val <= 0:
-                print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
-                sys.exit(1)
-
-        print(f"{CHECK} Config is valid ({len(reminders)} reminder(s))")
-
+        with open(CONFIG, encoding="utf-8") as f:
+            config = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Invalid JSON: {e}")
         sys.exit(1)
@@ -106,13 +109,34 @@ def cmd_validate(args):
         print(f"Error reading config file: {e}")
         sys.exit(1)
 
+    if "reminders" not in config:
+        print("Warning: No 'reminders' key found in config.")
+
+    reminders = config.get("reminders", [])
+    for r in reminders:
+        if "name" not in r:
+            print("Error: Reminder missing 'name' field.")
+            sys.exit(1)
+        # Accept both 'interval' and 'interval_minutes' (legacy)
+        interval_val = r.get("interval") or r.get("interval_minutes")
+        if interval_val is None:
+            print(f"Error: Reminder '{r.get('name')}' missing 'interval' field.")
+            sys.exit(1)
+        if not isinstance(interval_val, str) and (
+            not isinstance(interval_val, (int, float)) or interval_val <= 0
+        ):
+            print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
+            sys.exit(1)
+
+    print(f"{CHECK} Config is valid ({len(reminders)} reminder(s))")
+
 
 def cmd_export(args):
     config = load_config()
 
     if args.format == "json":
         output = json.dumps(config, indent=2)
-    elif args.format == "csv":
+    else:  # csv
         reminders = config.get("reminders", [])
         if reminders:
             lines = ["name,interval,title,message,urgency,enabled"]
@@ -125,8 +149,6 @@ def cmd_export(args):
             output = "\n".join(lines)
         else:
             output = "name,interval,title,message,urgency,enabled"
-    else:
-        output = json.dumps(config, indent=2)
 
     if args.output:
         try:
@@ -253,11 +275,7 @@ def cmd_import(args):
             config["slack"] = imported_data.get("slack", config.get("slack", {}))
             action = "Imported"
 
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
-        if platform.system() != "Windows":
-            os.chmod(CONFIG, 0o600)
-
+        _save_config(config)
         print(f"{CHECK} {action} {len(imported_data.get('reminders', []))} reminder(s)")
 
     except json.JSONDecodeError as e:

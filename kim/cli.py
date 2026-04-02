@@ -255,10 +255,9 @@ logs:   ~/.kim/kim.log
             new_argv.append(arg)
     sys.argv = [sys.argv[0]] + new_argv
 
-    # Convert -i flag to interactive command (case-insensitive)
-    for i, arg in enumerate(sys.argv):
-        if arg.lower() == "-i":
-            sys.argv[i] = "interactive"
+    # Convert -i flag to interactive command — only at argv[1] (subcommand slot)
+    if len(sys.argv) > 1 and sys.argv[1].lower() == "-i":
+        sys.argv[1] = "interactive"
 
     args = parser.parse_args()
 
