@@ -38,18 +38,22 @@ kim logs -n 50   # Last 50 lines
 ### `kim add`
 
 ```bash
-kim add NAME -I INTERVAL [-t TITLE] [-m MESSAGE] [-u URGENCY]
+kim add NAME -I INTERVAL [-t TITLE] [-m MESSAGE] [-u URGENCY] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
 ```
 
 **Options:**
 - `-I, --interval` — Interval (e.g., `30m`, `1h`, `1d`, or just number for minutes) [required]
 - `-t, --title` — Notification title
-- `-m, --message` — Notification message  
+- `-m, --message` — Notification message
 - `-u, --urgency` — `low`, `normal`, `critical` (default: `normal`)
+- `--sound-file` — Per-reminder sound file path (overrides global)
+- `--slack-channel` — Per-reminder Slack channel
+- `--slack-webhook` — Per-reminder Slack webhook URL
 
 **Example:**
 ```bash
 kim add eye-break -I 30m -t "👁️ Eye Break" -m "Look away from screen" -u critical
+kim add standup -I 30m --slack-channel "#standup" --sound-file ~/sounds/urgent.wav
 ```
 
 ### `kim remove`
@@ -68,8 +72,13 @@ kim disable NAME
 ### `kim update`
 
 ```bash
-kim update NAME [-i INTERVAL] [-t TITLE] [-m MESSAGE] [-u URGENCY] [--enable] [--disable]
+kim update NAME [-I INTERVAL] [-t TITLE] [-m MESSAGE] [-u URGENCY] [--enable] [--disable] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
 ```
+
+**New options:**
+- `--sound-file` — Set per-reminder sound file
+- `--slack-channel` — Set per-reminder Slack channel
+- `--slack-webhook` — Set per-reminder Slack webhook URL
 
 ## One-shot Reminders
 

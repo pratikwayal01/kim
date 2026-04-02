@@ -105,6 +105,38 @@ Fires once, runs in the background, frees your terminal immediately.
 | `sound` | `true` / `false` | (top-level) Play sound globally |
 | `slack` | object | (top-level) Slack settings |
 
+### Per-Reminder Overrides
+
+Each reminder can override global sound and Slack settings:
+
+```json
+{
+  "reminders": [
+    {
+      "name": "standup",
+      "interval": "30m",
+      "sound_file": "~/sounds/urgent.wav",
+      "slack": {
+        "enabled": true,
+        "webhook_url": "https://hooks.slack.com/services/...",
+        "channel": "#standup-alerts"
+      }
+    }
+  ],
+  "sound": true,
+  "slack": {
+    "enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/...",
+    "channel": "#general"
+  }
+}
+```
+
+Or via CLI:
+```bash
+kim add standup -I 30m --sound-file ~/sounds/urgent.wav --slack-channel "#standup"
+```
+
 ### Slack Integration
 
 ```json
