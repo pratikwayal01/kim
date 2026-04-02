@@ -862,20 +862,23 @@ No UI. Config-driven. Runs in the background.</p>
 </ul>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
-<p><strong>Linux / macOS</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+<p><strong>pip</strong> (all platforms) — <a href="https://pypi.org/project/kim-reminder/"><img alt="PyPI" src="https://img.shields.io/pypi/v/kim-reminder" /></a>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>kim-reminder
 </code></pre></div></p>
-<p><strong>Windows</strong> (PowerShell as Admin)
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
+<p><strong>Linux / macOS</strong> (binary + autostart)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+</code></pre></div></p>
+<p><strong>Windows</strong> (PowerShell as Admin, binary + autostart)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
 </code></pre></div></p>
 <p>That's it. kim starts automatically on login.</p>
 <h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kim<span class="w"> </span>start<span class="w">          </span><span class="c1"># Start the daemon</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kim<span class="w"> </span>stop<span class="w">           </span><span class="c1"># Stop the daemon</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>kim<span class="w"> </span>status<span class="w">         </span><span class="c1"># Show running reminders</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>kim<span class="w"> </span>list<span class="w">           </span><span class="c1"># List all reminders from config</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>kim<span class="w"> </span>add<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Break&quot;</span><span class="w"> </span>--message<span class="w"> </span><span class="s2">&quot;Stand up&quot;</span><span class="w"> </span>eye-break
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>10m
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kim<span class="w"> </span>start<span class="w">          </span><span class="c1"># Start the daemon</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>kim<span class="w"> </span>stop<span class="w">           </span><span class="c1"># Stop the daemon</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>kim<span class="w"> </span>status<span class="w">         </span><span class="c1"># Show running reminders</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>kim<span class="w"> </span>list<span class="w">           </span><span class="c1"># List all reminders from config</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>kim<span class="w"> </span>add<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Break&quot;</span><span class="w"> </span>--message<span class="w"> </span><span class="s2">&quot;Stand up&quot;</span><span class="w"> </span>eye-break
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>10m
 </code></pre></div>
 <h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
 <ul>
@@ -891,6 +894,7 @@ No UI. Config-driven. Runs in the background.</p>
 <h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://github.com/pratikwayal01/kim">GitHub Repository</a></li>
+<li><a href="https://pypi.org/project/kim-reminder/">PyPI Package</a></li>
 <li><a href="https://github.com/pratikwayal01/kim/issues">Issue Tracker</a></li>
 <li><a href="https://github.com/pratikwayal01/kim/wiki">Wiki</a></li>
 </ul>

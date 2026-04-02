@@ -484,15 +484,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#automatic-installation" class="md-nav__link">
+  <a href="#pip-recommended-all-platforms" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Automatic Installation
+        pip (Recommended — all platforms)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Automatic Installation">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-installation-binary-autostart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Installation (binary + autostart)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Installation (binary + autostart)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -589,6 +600,17 @@
     <span class="md-ellipsis">
       
         Automatic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#via-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via pip
       
     </span>
   </a>
@@ -858,15 +880,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#automatic-installation" class="md-nav__link">
+  <a href="#pip-recommended-all-platforms" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Automatic Installation
+        pip (Recommended — all platforms)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Automatic Installation">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-installation-binary-autostart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Installation (binary + autostart)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Installation (binary + autostart)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -970,6 +1003,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#via-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via pip
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#manual" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1056,10 +1100,19 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<h2 id="automatic-installation">Automatic Installation<a class="headerlink" href="#automatic-installation" title="Permanent link">&para;</a></h2>
+<h2 id="pip-recommended-all-platforms">pip (Recommended — all platforms)<a class="headerlink" href="#pip-recommended-all-platforms" title="Permanent link">&para;</a></h2>
+<p><a href="https://pypi.org/project/kim-reminder/"><img alt="PyPI" src="https://img.shields.io/pypi/v/kim-reminder" /></a></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>kim-reminder
+</code></pre></div>
+<p>Then run <code>kim start</code> to launch the daemon. That's all.</p>
+<blockquote>
+<p>pip installs the <code>kim</code> command globally. Autostart (systemd / launchd / Task Scheduler)
+is set up the first time you run <code>kim start</code>.</p>
+</blockquote>
+<h2 id="automatic-installation-binary-autostart">Automatic Installation (binary + autostart)<a class="headerlink" href="#automatic-installation-binary-autostart" title="Permanent link">&para;</a></h2>
 <h3 id="linux-macos">Linux / macOS<a class="headerlink" href="#linux-macos" title="Permanent link">&para;</a></h3>
 <p>Run the install script (curl):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
 </code></pre></div>
 <p>The script will:
 1. Download the latest binary for your platform
@@ -1067,7 +1120,7 @@
 3. Set up autostart (systemd user service on Linux, launchd agent on macOS)
 4. Start the daemon</p>
 <h3 id="windows-powershell-as-admin">Windows (PowerShell as Admin)<a class="headerlink" href="#windows-powershell-as-admin" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
 </code></pre></div>
 <p>The script will:
 1. Download the latest Windows executable
@@ -1080,8 +1133,8 @@
 <ol>
 <li>
 <p>Clone the repository:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pratikwayal01/kim.git
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">cd</span><span class="w"> </span>kim
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pratikwayal01/kim.git
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">cd</span><span class="w"> </span>kim
 </code></pre></div></p>
 </li>
 <li>
@@ -1089,14 +1142,14 @@
 </li>
 <li>
 <p>Run directly:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>kim.py<span class="w"> </span>start
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>kim.py<span class="w"> </span>start
 </code></pre></div></p>
 </li>
 <li>
 <p>Optionally install globally:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>kim.py<span class="w">  </span><span class="c1"># ensure it&#39;s executable</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>cp<span class="w"> </span>kim.py<span class="w"> </span>/usr/local/bin/kim
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>chmod<span class="w"> </span>+x<span class="w"> </span>/usr/local/bin/kim
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>python<span class="w"> </span>kim.py<span class="w">  </span><span class="c1"># ensure it&#39;s executable</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>cp<span class="w"> </span>kim.py<span class="w"> </span>/usr/local/bin/kim
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>chmod<span class="w"> </span>+x<span class="w"> </span>/usr/local/bin/kim
 </code></pre></div></p>
 </li>
 </ol>
@@ -1104,18 +1157,21 @@
 <p>Download the latest binary for your platform from <a href="https://github.com/pratikwayal01/kim/releases">GitHub Releases</a>.</p>
 <h2 id="post-installation">Post-Installation<a class="headerlink" href="#post-installation" title="Permanent link">&para;</a></h2>
 <p>After installation, kim starts automatically on login. You can manage it with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kim<span class="w"> </span>start<span class="w">      </span><span class="c1"># Start the daemon</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kim<span class="w"> </span>stop<span class="w">       </span><span class="c1"># Stop the daemon</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>kim<span class="w"> </span>status<span class="w">     </span><span class="c1"># Show status</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>start<span class="w">      </span><span class="c1"># Start the daemon</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>kim<span class="w"> </span>stop<span class="w">       </span><span class="c1"># Stop the daemon</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>kim<span class="w"> </span>status<span class="w">     </span><span class="c1"># Show status</span>
 </code></pre></div>
 <h2 id="updating">Updating<a class="headerlink" href="#updating" title="Permanent link">&para;</a></h2>
 <h3 id="automatic">Automatic<a class="headerlink" href="#automatic" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>self-update
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kim<span class="w"> </span>self-update
+</code></pre></div>
+<h3 id="via-pip">Via pip<a class="headerlink" href="#via-pip" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>kim-reminder
 </code></pre></div>
 <h3 id="manual">Manual<a class="headerlink" href="#manual" title="Permanent link">&para;</a></h3>
 <p>Re-run the installation script or download the latest binary.</p>
 <h2 id="uninstallation">Uninstallation<a class="headerlink" href="#uninstallation" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kim<span class="w"> </span>uninstall
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kim<span class="w"> </span>uninstall
 </code></pre></div>
 <p>This will:
 - Stop the daemon
@@ -1130,10 +1186,10 @@
 </ul>
 <h3 id="daemon-not-starting">Daemon Not Starting<a class="headerlink" href="#daemon-not-starting" title="Permanent link">&para;</a></h3>
 <p>Check the logs:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kim<span class="w"> </span>logs
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kim<span class="w"> </span>logs
 </code></pre></div></p>
 <p>Ensure the config file is valid:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kim<span class="w"> </span>validate
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kim<span class="w"> </span>validate
 </code></pre></div></p>
 
 
