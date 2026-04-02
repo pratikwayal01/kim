@@ -13,9 +13,6 @@ import urllib.request
 from .core import log
 from .sound import play_sound_file
 
-# ── Custom sound playback helpers (imported from sound module) ────────────────
-# play_sound_file(path, platform_system) is used for custom sound playback.
-
 
 # ── Linux environment ─────────────────────────────────────────────────────────
 def _linux_env():
@@ -38,7 +35,7 @@ def _notify_linux(title, message, urgency, sound, sound_file=None):
     except FileNotFoundError:
         log.error("notify-send not found. Install libnotify.")
     except Exception as e:
-        log.error(f"notify-send: {e}")
+        log.error("notify-send: %s", e)
 
     if sound:
         if sound_file:
@@ -80,7 +77,7 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
     except FileNotFoundError:
         log.error("osascript not found. Is this macOS?")
     except Exception as e:
-        log.error(f"osascript: {e}")
+        log.error("osascript: %s", e)
 
     if sound and sound_file:
         play_sound_file(sound_file, "Darwin")
@@ -113,7 +110,7 @@ $n.Dispose()
     except FileNotFoundError:
         log.error("powershell not found. Is this Windows?")
     except Exception as e:
-        log.warning(f"Balloon notification failed: {e}")
+        log.warning("Balloon notification failed: %s", e)
 
     # Play sound file if specified (or system default if sound=True but no custom file)
     if sound or sound_file:
@@ -126,11 +123,11 @@ def notify(
     message: str,
     urgency: str = "normal",
     sound: bool = True,
-    sound_file: str = None,
-    slack_config: dict = None,
+    sound_file: str | None = None,
+    slack_config: dict | None = None,
 ):
     system = platform.system()
-    log.debug(f"notify [{urgency}] → {title}")
+    log.debug("notify [%s] -> %s", urgency, title)
     if system == "Linux":
         _notify_linux(title, message, urgency, sound, sound_file)
     elif system == "Darwin":
@@ -138,7 +135,7 @@ def notify(
     elif system == "Windows":
         _notify_windows(title, message, urgency, sound, sound_file)
     else:
-        log.warning(f"Unsupported platform: {system}")
+        log.warning("Unsupported platform for notifications: %s", system)
 
     if slack_config and slack_config.get("enabled"):
         if slack_config.get("webhook_url"):
@@ -150,11 +147,8 @@ def notify(
 
 
 # ── Slack notification helpers ────────────────────────────────────────────────
-def _notify_slack_webhook(title: str, message: str, webhook_url: str):
+def _notify_slack_webhook(title: str, message: str, webhook_url: str) -> None:
     try:
-        import urllib.request
-        import urllib.error
-
         payload = {
             "text": f"*{title}*\n{message}",
             "username": "kim reminder",
@@ -166,26 +160,23 @@ def _notify_slack_webhook(title: str, message: str, webhook_url: str):
             webhook_url, data=data, headers={"Content-Type": "application/json"}
         )
         urllib.request.urlopen(req, timeout=10)
-        log.debug(f"Slack webhook notification sent: {title}")
-    except ImportError:
-        log.error("urllib not available for Slack webhook")
+        log.debug("Slack webhook notification sent: %s", title)
     except urllib.error.URLError as e:
-        log.error(f"Slack webhook error: {e}")
+        log.error("Slack webhook error: %s", e)
     except Exception as e:
-        log.error(f"Slack webhook failed: {e}")
+        log.error("Slack webhook failed: %s", e)
 
 
-def _notify_slack_bot(title: str, message: str, bot_token: str, channel: str):
+def _notify_slack_bot(
+    title: str, message: str, bot_token: str, channel: str, urgency: str = "normal"
+) -> None:
     try:
-        import urllib.request
-        import urllib.error
-
         urgency_emoji = {
             "low": ":information_source:",
             "normal": ":bell:",
             "critical": ":rotating_light:",
         }
-        emoji = urgency_emoji.get("normal", ":bell:")
+        emoji = urgency_emoji.get(urgency, ":bell:")
 
         payload = {
             "channel": channel,
@@ -204,10 +195,8 @@ def _notify_slack_bot(title: str, message: str, bot_token: str, channel: str):
             },
         )
         urllib.request.urlopen(req, timeout=10)
-        log.debug(f"Slack bot notification sent: {title}")
-    except ImportError:
-        log.error("urllib not available for Slack bot")
+        log.debug("Slack bot notification sent: %s", title)
     except urllib.error.URLError as e:
-        log.error(f"Slack bot error: {e}")
+        log.error("Slack bot error: %s", e)
     except Exception as e:
-        log.error(f"Slack bot failed: {e}")
+        log.error("Slack bot failed: %s", e)
