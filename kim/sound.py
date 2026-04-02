@@ -34,8 +34,8 @@ def _play_sound_file_linux(path: str) -> None:
                 )
                 return
             except Exception as e:
-                log.warning(f"Sound player {cmd[0]} failed: {e}")
-    log.error(f"No supported audio player found to play: {path}")
+                log.warning("Sound player %s failed: %s", cmd[0], e)
+    log.error("No supported audio player found to play: %s", path)
 
 
 def _play_sound_file_mac(path: str) -> None:
@@ -46,7 +46,7 @@ def _play_sound_file_mac(path: str) -> None:
                 ["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         except Exception as e:
-            log.error(f"afplay failed: {e}")
+            log.error("afplay failed: %s", e)
     else:
         log.error("afplay not found — cannot play custom sound on macOS")
 
@@ -59,7 +59,7 @@ def _play_sound_file_windows(path: str) -> None:
     """
     p = Path(path)
     if not p.exists():
-        log.error(f"Sound file not found: {path}")
+        log.error("Sound file not found: %s", path)
         return
 
     if p.suffix.lower() == ".wav":
@@ -70,7 +70,7 @@ def _play_sound_file_windows(path: str) -> None:
             winsound.PlaySound(str(p), winsound.SND_FILENAME | winsound.SND_ASYNC)
             return
         except Exception as e:
-            log.warning(f"winsound failed: {e}")
+            log.warning("winsound failed: %s", e)
 
         # Fallback: PowerShell SoundPlayer (also wav only)
         ps_path = str(p).replace("'", "''")
@@ -84,7 +84,7 @@ def _play_sound_file_windows(path: str) -> None:
             )
             return
         except Exception as e:
-            log.warning(f"PowerShell SoundPlayer failed: {e}")
+            log.warning("PowerShell SoundPlayer failed: %s", e)
     else:
         # Non-wav: try Windows Media Player via PowerShell, then wmplayer.exe
         safe = str(p).replace("'", "''")
@@ -103,7 +103,7 @@ def _play_sound_file_windows(path: str) -> None:
             )
             return
         except Exception as e:
-            log.warning(f"PowerShell WMP failed: {e}")
+            log.warning("PowerShell WMP failed: %s", e)
 
         if shutil.which("ffplay"):
             try:
@@ -115,21 +115,15 @@ def _play_sound_file_windows(path: str) -> None:
                 )
                 return
             except Exception as e:
-                log.warning(f"ffplay failed: {e}")
+                log.warning("ffplay failed: %s", e)
 
-    log.error(f"Could not play sound file: {path}")
+    log.error("Could not play sound file: %s", path)
 
 
 def play_sound_file(path: str, system: str) -> None:
     """Dispatch sound playback to platform-specific function."""
     if path is None:
-        # Play system default sound
-        if system == "Windows":
-            _play_system_sound_windows()
-        elif system == "Darwin":
-            _play_system_sound_mac()
-        elif system == "Linux":
-            _play_system_sound_linux()
+        _play_system_default_sound(system)
         return
 
     if system == "Linux":
@@ -139,34 +133,55 @@ def play_sound_file(path: str, system: str) -> None:
     elif system == "Windows":
         _play_sound_file_windows(path)
     else:
-        log.warning(f"Unsupported platform for sound playback: {system}")
+        log.warning("Unsupported platform for sound playback: %s", system)
 
 
-def _play_system_sound_windows() -> None:
-    """Play system default sound on Windows."""
-    log.debug("Playing system sound on Windows")
-    try:
-        import winsound
-
-        winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC)
-        log.debug("winsound played")
-    except Exception as e:
-        log.debug(f"winsound failed: {e}")
-        # Fallback to PowerShell
+def _play_system_default_sound(system: str) -> None:
+    """Play the system default notification sound."""
+    if system == "Windows":
         try:
-            subprocess.Popen(
-                [
-                    "powershell",
-                    "-Command",
-                    "[System.Media.SystemSounds]::Asterisk.Play()",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
+            import winsound
+
+            winsound.PlaySound(
+                "SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC
             )
-            log.debug("PowerShell sound started")
-        except Exception as e2:
-            log.debug(f"PowerShell sound failed: {e2}")
+        except Exception:
+            try:
+                subprocess.Popen(
+                    [
+                        "powershell",
+                        "-Command",
+                        "[System.Media.SystemSounds]::Asterisk.Play()",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+    elif system == "Darwin":
+        if shutil.which("afplay"):
+            try:
+                subprocess.Popen(
+                    ["afplay", "/System/Library/Sounds/Glass.aiff"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+    elif system == "Linux":
+        for cmd in (
+            ["canberra-gtk-play", "--id=bell"],
+            ["paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"],
+        ):
+            if shutil.which(cmd[0]):
+                try:
+                    subprocess.Popen(
+                        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                except Exception:
+                    pass
+                break
 
 
 def validate_sound_file(path: str) -> tuple[bool, str]:
