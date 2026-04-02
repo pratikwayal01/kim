@@ -1,5 +1,24 @@
 """
 Self-update and uninstall commands for kim.
+
+Install-type detection
+----------------------
+kim can be installed in three ways; we detect which one is active and
+update accordingly:
+
+1. pip / editable install
+   `importlib.metadata` can find the "kim-reminder" distribution.
+   Update path: `pip install --upgrade kim-reminder`
+
+2. Single-file / script install  (`~/.kim/kim.py` + a BAT/shell wrapper)
+   `shutil.which("kim")` resolves to a .BAT or shell script that calls
+   a `kim.py` inside ~/.kim/.  We download the new `kim.py` asset from
+   the GitHub release and atomically replace ~/.kim/kim.py.
+
+3. Standalone binary install  (compiled PyInstaller exe on PATH)
+   `shutil.which("kim")` resolves to a `.exe` (Windows) or a file with
+   no extension whose first bytes are ELF/Mach-O magic (Unix).
+   We download the matching platform binary and atomically replace it.
 """
 
 import json
@@ -17,209 +36,454 @@ from .core import KIM_DIR, PID_FILE, VERSION, log
 from .utils import CHECK
 
 
-def cmd_selfupdate(args):
-    print(f"Current version: {VERSION}")
-    print("Checking for updates...")
+# ---------------------------------------------------------------------------
+# Install-type detection
+# ---------------------------------------------------------------------------
+
+
+def _detect_install_type():
+    """
+    Returns one of: "pip", "script", "binary", "unknown"
+
+    "pip"    — installed as a Python package (importlib.metadata finds it)
+    "script" — ~/.kim/kim.py exists and the kim wrapper calls it
+    "binary" — kim on PATH is a compiled standalone exe / ELF binary
+    "unknown"— cannot determine; fall back to pip-upgrade attempt
+    """
+    # 1. pip / editable install — fastest check
+    try:
+        import importlib.metadata
+
+        importlib.metadata.distribution("kim-reminder")
+        return "pip"
+    except Exception:
+        pass
+
+    # 2. Script install — ~/.kim/kim.py exists
+    script_path = KIM_DIR / "kim.py"
+    if script_path.exists():
+        return "script"
+
+    # 3. Binary install — kim on PATH is an actual executable, not a script
+    kim_bin = shutil.which("kim")
+    if kim_bin:
+        p = Path(kim_bin).resolve()
+        # .exe suffix → clearly a binary
+        if p.suffix.lower() == ".exe":
+            return "binary"
+        # no suffix → could be ELF or Mach-O; check magic bytes
+        if p.suffix == "":
+            try:
+                magic = p.read_bytes()[:4]
+                if (
+                    magic[:2] == b"MZ"
+                    or magic[:4] == b"\x7fELF"
+                    or magic[:4]
+                    in (
+                        b"\xfe\xed\xfa\xce",
+                        b"\xfe\xed\xfa\xcf",
+                        b"\xce\xfa\xed\xfe",
+                        b"\xcf\xfa\xed\xfe",
+                    )
+                ):
+                    return "binary"
+            except OSError:
+                pass
+
+    return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _fetch_latest_release():
+    """Return the parsed JSON of the latest GitHub release, or raise."""
+    url = "https://api.github.com/repos/pratikwayal01/kim/releases/latest"
+    req = urllib.request.Request(url, headers={"User-Agent": f"kim/{VERSION}"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read().decode())
+
+
+def _find_asset(assets, name):
+    """Return browser_download_url for the asset whose name contains `name`."""
+    for a in assets:
+        if name in a.get("name", ""):
+            return a.get("browser_download_url")
+    return None
+
+
+def _download_to(url, dest: Path, show_progress=True):
+    """
+    Stream-download `url` to `dest` (a Path).
+    Raises on HTTP error or if the downloaded content looks like an HTML
+    error page rather than a real binary/script.
+    Returns the first 4 bytes (for magic-byte verification by the caller).
+    """
+    req = urllib.request.Request(url, headers={"User-Agent": f"kim/{VERSION}"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"HTTP {resp.status} downloading {url}")
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" in content_type:
+                raise RuntimeError(
+                    f"Received HTML instead of binary (Content-Type: {content_type})"
+                )
+            if show_progress:
+                total = int(resp.headers.get("Content-Length") or 0)
+                downloaded = 0
+                with open(dest, "wb") as fout:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        fout.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = downloaded * 100 // total
+                            print(
+                                f"\r  {pct:3d}%  {downloaded // 1024} / {total // 1024} KB",
+                                end="",
+                                flush=True,
+                            )
+                if total:
+                    print()  # newline after progress
+            else:
+                with open(dest, "wb") as fout:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        fout.write(chunk)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"HTTP {e.code} {e.reason} downloading {url}") from e
+
+    # Read magic bytes for caller to verify
+    try:
+        return dest.read_bytes()[:4]
+    except OSError:
+        return b""
+
+
+def _atomic_replace(src: Path, dst: Path):
+    """Replace dst with src atomically.  Raises PermissionError if in use."""
+    try:
+        src.replace(dst)
+    except PermissionError as e:
+        src.unlink(missing_ok=True)
+        raise PermissionError(
+            f"Could not replace {dst} — file may be in use.\n  Run: mv {src} {dst}"
+        ) from e
+
+
+# ---------------------------------------------------------------------------
+# Per-install-type update implementations
+# ---------------------------------------------------------------------------
+
+
+def _update_via_pip(latest_version: str, force: bool):
+    """
+    Run `pip install --upgrade kim-reminder==<version>` in a subprocess.
+    This correctly updates the Python package regardless of where pip put it.
+    """
+    print(f"Upgrading pip package kim-reminder to {latest_version}...")
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                f"kim-reminder=={latest_version}",
+            ],
+            timeout=120,
+        )
+        if result.returncode != 0:
+            # Retry without pinned version (lets pip pick latest)
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "kim-reminder"],
+                timeout=120,
+            )
+        if result.returncode == 0:
+            print(f"\n{CHECK} Updated to {latest_version}")
+            print("Restart your terminal or run 'kim --version' to verify.")
+        else:
+            print("\nPip upgrade failed. Try manually:")
+            print(f"  pip install --upgrade kim-reminder")
+    except FileNotFoundError:
+        print("pip not found. Try manually:")
+        print(f"  pip install --upgrade kim-reminder")
+    except subprocess.TimeoutExpired:
+        print("pip upgrade timed out. Try manually:")
+        print(f"  pip install --upgrade kim-reminder")
+
+
+def _update_script(assets: list, latest_version: str):
+    """
+    Script install: download the kim.py asset and replace ~/.kim/kim.py.
+    Also replaces the entire kim/ package directory from the source tarball
+    if available — but as a minimum the kim.py stub is updated.
+    """
+    script_path = KIM_DIR / "kim.py"
+
+    # Look for kim.py asset first
+    asset_url = _find_asset(assets, "kim.py")
+    if not asset_url:
+        # Fall back to pip upgrade which will also work if the package is on PyPI
+        print("No kim.py asset found in release — attempting pip upgrade instead.")
+        _update_via_pip(latest_version, force=True)
+        return
+
+    tmp = script_path.with_suffix(".new")
+    print(f"Downloading kim.py...")
+    try:
+        magic = _download_to(asset_url, tmp)
+    except RuntimeError as e:
+        tmp.unlink(missing_ok=True)
+        print(f"Download error: {e}")
+        return
+
+    # Verify it looks like a Python script (starts with # or from)
+    if magic and not (
+        magic.startswith(b"#")
+        or magic.startswith(b"fr")
+        or magic.startswith(b"im")
+        or magic.startswith(b"\xef\xbb\xbf#")
+    ):
+        tmp.unlink(missing_ok=True)
+        print(
+            "Integrity check failed: downloaded file does not look like a Python script."
+        )
+        return
 
     try:
-        url = "https://api.github.com/repos/pratikwayal01/kim/releases/latest"
-        req = urllib.request.Request(url, headers={"User-Agent": "kim"})
+        _atomic_replace(tmp, script_path)
+    except PermissionError as e:
+        print(str(e))
+        return
 
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            latest_version = data.get("tag_name", "").lstrip("v")
+    if platform.system() != "Windows":
+        try:
+            os.chmod(script_path, 0o755)
+        except OSError:
+            pass
 
-            if not latest_version:
-                print("Could not determine latest version from GitHub API.")
-                return
+    print(f"\n{CHECK} Updated kim.py to {latest_version}")
+    print("Run 'kim --version' to verify.")
 
-            if latest_version == VERSION:
-                print(f"You're running the latest version ({VERSION}).")
-                return
 
-            print(f"New version available: {latest_version}")
+def _update_binary(assets: list, latest_version: str):
+    """
+    Binary install: download the matching platform executable and replace it.
+    """
+    system = platform.system().lower()
+    arch = platform.machine()
 
-            if not args.force:
-                confirm = input("Update? (y/N): ").strip().lower()
-                if confirm != "y":
-                    print("Update cancelled.")
-                    return
+    if system == "linux":
+        arch = {
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "aarch64": "arm64",
+            "arm64": "arm64",
+        }.get(arch, "x86_64")
+        asset_name = f"kim-linux-{arch}"
+    elif system == "darwin":
+        arch = {
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "aarch64": "arm64",
+            "arm64": "arm64",
+        }.get(arch, "x86_64")
+        asset_name = f"kim-macos-{arch}"
+    elif system == "windows":
+        asset_name = "kim-windows-x86_64.exe"
+    else:
+        print(f"Unsupported platform: {system}")
+        sys.exit(1)
 
-            system = platform.system().lower()
-            arch = platform.machine()
+    asset_url = _find_asset(assets, asset_name)
+    if not asset_url:
+        print(f"No prebuilt binary found for {system}-{arch} in the release.")
+        print(f"  Available assets: {[a.get('name') for a in assets]}")
+        print("Please update manually from:")
+        print(f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}")
+        return
 
-            if system == "linux":
-                arch_map = {
-                    "x86_64": "x86_64",
-                    "amd64": "x86_64",
-                    "aarch64": "arm64",
-                    "arm64": "arm64",
-                }
-                arch = arch_map.get(arch, "x86_64")
-                asset_name = f"kim-linux-{arch}"
-            elif system == "darwin":
-                arch_map = {
-                    "x86_64": "x86_64",
-                    "amd64": "x86_64",
-                    "aarch64": "arm64",
-                    "arm64": "arm64",
-                }
-                arch = arch_map.get(arch, "x86_64")
-                asset_name = f"kim-macos-{arch}"
-            elif system == "windows":
-                asset_name = "kim-windows-x86_64.exe"
-            else:
-                print(f"Unsupported platform: {system}")
-                sys.exit(1)
+    # Locate the binary to replace
+    kim_bin = shutil.which("kim")
+    if kim_bin:
+        kim_path = Path(kim_bin).resolve()
+        # If on Windows and what's on PATH is not an .exe (e.g. a .BAT shim),
+        # look for the actual exe the shim is wrapping, or fall back to default
+        if system == "windows" and kim_path.suffix.lower() not in (".exe", ""):
+            # Try to parse the BAT to find the exe path
+            try:
+                bat_content = kim_path.read_text(encoding="utf-8", errors="ignore")
+                # BAT line: @"C:\...\kim.exe" %*
+                for line in bat_content.splitlines():
+                    line = line.strip()
+                    if ".exe" in line.lower():
+                        import re
 
-            asset_url = None
-            for a in data.get("assets", []):
-                if asset_name in a.get("name", ""):
-                    asset_url = a.get("browser_download_url")
-                    break
-
-            if not asset_url:
-                print(f"No prebuilt binary for {system}-{arch}")
-                print("Please update manually from GitHub releases.")
-                return
-
-            kim_in_path = shutil.which("kim")
-            if kim_in_path:
-                kim_path = Path(kim_in_path).resolve()
-            else:
-                if platform.system() == "Windows":
-                    kim_path = (
-                        Path.home()
-                        / "AppData"
-                        / "Local"
-                        / "Programs"
-                        / "kim"
-                        / "kim.exe"
-                    )
-                elif platform.system() == "Darwin":
-                    # Prefer Homebrew prefix if available, otherwise ~/.local/bin
-                    brew_bin = Path("/opt/homebrew/bin/kim")
-                    kim_path = (
-                        brew_bin
-                        if brew_bin.parent.exists()
-                        else Path.home() / ".local" / "bin" / "kim"
-                    )
-                else:
-                    kim_path = Path.home() / ".local" / "bin" / "kim"
-                kim_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # ── Resolve the correct target path ───────────────────────────
-            # If shutil.which returned a .py script (user is running the
-            # source directly), do NOT overwrite it with a compiled exe —
-            # that would put a PE binary where Python expects a script.
-            # In that case, fall back to a platform-appropriate install dir.
-            if (
-                kim_in_path
-                and system == "windows"
-                and kim_path.suffix.lower() not in (".exe", "")
-            ):
+                        m = re.search(r'"([^"]+\.exe)"', line, re.IGNORECASE)
+                        if m:
+                            kim_path = Path(m.group(1))
+                            break
+            except OSError:
+                pass
+            if kim_path.suffix.lower() != ".exe":
                 kim_path = (
                     Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe"
                 )
                 kim_path.parent.mkdir(parents=True, exist_ok=True)
-
-            tmp_path = kim_path.with_suffix(".new")
-
-            # ── Download with proper headers + streaming ──────────────────
-            print(f"Downloading {asset_url}...")
-            req = urllib.request.Request(
-                asset_url,
-                headers={"User-Agent": f"kim/{VERSION}"},
+    else:
+        if system == "windows":
+            kim_path = (
+                Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe"
             )
-            try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    if resp.status != 200:
-                        print(f"Download failed: HTTP {resp.status}")
-                        return
-                    # Check Content-Type to reject HTML/error pages
-                    content_type = resp.headers.get("Content-Type", "")
-                    if "text/html" in content_type:
-                        print("Download failed: received HTML instead of binary.")
-                        return
-                    with open(tmp_path, "wb") as fout:
-                        while True:
-                            chunk = resp.read(65536)
-                            if not chunk:
-                                break
-                            fout.write(chunk)
-            except Exception as e:
-                tmp_path.unlink(missing_ok=True)
-                print(f"Download error: {e}")
-                return
+        elif system == "darwin":
+            brew_bin = Path("/opt/homebrew/bin/kim")
+            kim_path = (
+                brew_bin
+                if brew_bin.parent.exists()
+                else Path.home() / ".local" / "bin" / "kim"
+            )
+        else:
+            kim_path = Path.home() / ".local" / "bin" / "kim"
+        kim_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # ── Verify the downloaded file is what we expect ─────────────
-            # GitHub CDN sometimes serves HTML redirect/error pages instead
-            # of the binary when User-Agent or auth is wrong.  A PE exe
-            # always starts with the two-byte magic "MZ"; a Python script
-            # always starts with "#!".  HTML would start with "<" or spaces.
-            try:
-                with open(tmp_path, "rb") as fcheck:
-                    magic = fcheck.read(4)
-            except Exception:
-                magic = b""
+    tmp_path = kim_path.with_suffix(".new")
+    print(f"Downloading {asset_name}...")
+    try:
+        magic = _download_to(asset_url, tmp_path)
+    except RuntimeError as e:
+        tmp_path.unlink(missing_ok=True)
+        print(f"Download error: {e}")
+        return
 
-            if system == "windows" and kim_path.suffix.lower() == ".exe":
-                if not magic.startswith(b"MZ"):
-                    tmp_path.unlink(missing_ok=True)
-                    print(
-                        "Download integrity check failed: not a valid Windows executable."
-                    )
-                    print("The release asset may not exist yet. Check:")
-                    print(
-                        f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
-                    )
-                    return
-            else:
-                # Unix binary or Python script — must not be HTML
-                if magic.startswith(b"<") or magic.startswith(b"\xff\xfe<"):
-                    tmp_path.unlink(missing_ok=True)
-                    print(
-                        "Download integrity check failed: received HTML instead of binary."
-                    )
-                    print(
-                        f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
-                    )
-                    return
+    # Integrity: Windows exe must start with MZ; Unix must not be HTML
+    if system == "windows" and kim_path.suffix.lower() == ".exe":
+        if not magic.startswith(b"MZ"):
+            tmp_path.unlink(missing_ok=True)
+            print("Integrity check failed: not a valid Windows executable.")
+            print(
+                f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
+            )
+            return
+    else:
+        if magic.startswith(b"<") or magic.startswith(b"\xff\xfe<"):
+            tmp_path.unlink(missing_ok=True)
+            print("Integrity check failed: received HTML instead of binary.")
+            print(
+                f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
+            )
+            return
 
-            if platform.system() != "Windows":
-                os.chmod(tmp_path, 0o755)
-            try:
-                tmp_path.replace(kim_path)
-            except PermissionError:
-                tmp_path.unlink(missing_ok=True)
-                print("Could not replace binary — the file is in use.")
-                print(f"  New binary is at: {tmp_path}")
-                print(f"  Manually replace: {kim_path}")
-                return
+    if platform.system() != "Windows":
+        try:
+            os.chmod(tmp_path, 0o755)
+        except OSError:
+            pass
 
-            print(f"\n{CHECK} Updated to version {latest_version}")
-            print("Run 'kim --version' to verify.")
+    try:
+        _atomic_replace(tmp_path, kim_path)
+    except PermissionError as e:
+        print(str(e))
+        return
 
+    print(f"\n{CHECK} Updated to {latest_version}: {kim_path}")
+    print("Run 'kim --version' to verify.")
+
+
+# ---------------------------------------------------------------------------
+# Public command
+# ---------------------------------------------------------------------------
+
+
+def cmd_selfupdate(args):
+    install_type = _detect_install_type()
+    print(f"Current version : {VERSION}")
+    print(f"Install type    : {install_type}")
+    print("Checking for updates...")
+
+    try:
+        data = _fetch_latest_release()
     except urllib.error.URLError as e:
-        print(f"Network error: {e}")
+        print(f"Network error: {e.reason}")
+        return
     except Exception as e:
-        print(f"Update failed: {e}")
-        if args.force:
-            raise
+        print(f"Could not reach GitHub API: {e}")
+        return
+
+    latest_version = data.get("tag_name", "").lstrip("v")
+    if not latest_version:
+        print("Could not determine latest version from GitHub API.")
+        return
+
+    if latest_version == VERSION:
+        print(f"Already up to date ({VERSION}).")
+        return
+
+    print(f"New version available: {latest_version}  (you have {VERSION})")
+
+    if not args.force:
+        try:
+            confirm = input("Update? (y/N): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nUpdate cancelled.")
+            return
+        if confirm != "y":
+            print("Update cancelled.")
+            return
+
+    assets = data.get("assets", [])
+
+    if install_type == "pip":
+        _update_via_pip(latest_version, args.force)
+    elif install_type == "script":
+        _update_script(assets, latest_version)
+    elif install_type == "binary":
+        _update_binary(assets, latest_version)
+    else:
+        # Unknown — try pip first (most common), then script fallback
+        print("Install type unknown — attempting pip upgrade.")
+        _update_via_pip(latest_version, args.force)
+
+    log.info(
+        "self-update attempted: %s -> %s (install_type=%s)",
+        VERSION,
+        latest_version,
+        install_type,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Uninstall
+# ---------------------------------------------------------------------------
 
 
 def cmd_uninstall(args):
+    import subprocess as _sp
+
     print("\033[1;31m=== Uninstall kim ===\033[0m\n")
 
     if PID_FILE.exists():
         print("kim is running. Stop it first with 'kim stop'")
         sys.exit(1)
 
-    confirm = (
-        input("This will remove kim data and the binary. Continue? (Y/N): ")
-        .strip()
-        .lower()
-    )
+    try:
+        confirm = (
+            input("This will remove kim data and the binary. Continue? (Y/N): ")
+            .strip()
+            .lower()
+        )
+    except (EOFError, KeyboardInterrupt):
+        print("\nUninstall cancelled.")
+        return
+
     if confirm != "y":
         print("Uninstall cancelled.")
         return
@@ -228,7 +492,7 @@ def cmd_uninstall(args):
 
     if system == "Linux":
         try:
-            subprocess.run(
+            _sp.run(
                 ["systemctl", "--user", "disable", "--now", "kim.service"],
                 capture_output=True,
             )
@@ -242,14 +506,14 @@ def cmd_uninstall(args):
         plist = Path.home() / "Library/LaunchAgents/io.kim.reminder.plist"
         if plist.exists():
             try:
-                subprocess.run(["launchctl", "unload", str(plist)], capture_output=True)
+                _sp.run(["launchctl", "unload", str(plist)], capture_output=True)
             except FileNotFoundError:
                 pass
             plist.unlink()
             print("Removed launchd plist.")
     elif system == "Windows":
         try:
-            result = subprocess.run(
+            result = _sp.run(
                 [
                     "powershell",
                     "-NoProfile",
@@ -267,29 +531,24 @@ def cmd_uninstall(args):
         except FileNotFoundError:
             print("No scheduled task found (or already removed).")
 
-    # Release the log file handle before wiping KIM_DIR.
-    # On Windows, open file handles prevent deletion (WinError 32).
-    # logging.shutdown() flushes and closes every handler registered
-    # with the root logger, including the FileHandler on kim.log.
+    # Release log file handle before wiping KIM_DIR (Windows WinError 32)
     logging.shutdown()
 
-    # Collect binary locations to clean up beyond KIM_DIR
-    _system = platform.system()
     binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
-    if _system == "Darwin":
+    if system == "Darwin":
         binary_candidates += [
             Path("/usr/local/bin/kim"),
             Path("/opt/homebrew/bin/kim"),
         ]
-    elif _system == "Windows":
+    elif system == "Windows":
         binary_candidates += [
             Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
         ]
-    # Also add whatever shutil.which finds (covers pip entry-point wrappers)
     _which = shutil.which("kim")
     if _which:
         binary_candidates.append(Path(_which).resolve())
-    for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):  # dedup
+
+    for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):
         if path.exists():
             if path.is_dir():
                 try:

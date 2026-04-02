@@ -245,9 +245,82 @@ class TestNotificationsSlackSecretLeak(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# selfupdate.py — empty tag_name guard
+# selfupdate.py — full self-update rewrite tests
 # ---------------------------------------------------------------------------
+class TestSelfUpdateInstallTypeDetection(unittest.TestCase):
+    """_detect_install_type() must correctly classify the install."""
+
+    def test_pip_install_detected(self):
+        """When importlib.metadata finds kim-reminder, type is 'pip'."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        fake_dist = MagicMock()
+        with patch.object(importlib.metadata, "distribution", return_value=fake_dist):
+            result = selfupdate._detect_install_type()
+        self.assertEqual(result, "pip")
+
+    def test_script_install_detected(self):
+        """When ~/.kim/kim.py exists and pip dist not found, type is 'script'."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_kim_dir = Path(tmpdir)
+            fake_script = fake_kim_dir / "kim.py"
+            fake_script.write_text("# kim script", encoding="utf-8")
+
+            with patch.object(
+                importlib.metadata,
+                "distribution",
+                side_effect=importlib.metadata.PackageNotFoundError,
+            ):
+                with patch.object(selfupdate, "KIM_DIR", fake_kim_dir):
+                    result = selfupdate._detect_install_type()
+        self.assertEqual(result, "script")
+
+    def test_binary_install_detected_exe(self):
+        """When which('kim') returns a .exe path, type is 'binary'."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_exe = Path(tmpdir) / "kim.exe"
+            fake_exe.write_bytes(b"MZ" + b"\x00" * 100)
+
+            with patch.object(
+                importlib.metadata,
+                "distribution",
+                side_effect=importlib.metadata.PackageNotFoundError,
+            ):
+                with patch.object(selfupdate, "KIM_DIR", Path(tmpdir) / "nokimdir"):
+                    with patch("shutil.which", return_value=str(fake_exe)):
+                        result = selfupdate._detect_install_type()
+        self.assertEqual(result, "binary")
+
+    def test_binary_install_detected_elf(self):
+        """When which('kim') returns an ELF binary (no suffix), type is 'binary'."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_bin = Path(tmpdir) / "kim"
+            fake_bin.write_bytes(b"\x7fELF" + b"\x00" * 100)
+
+            with patch.object(
+                importlib.metadata,
+                "distribution",
+                side_effect=importlib.metadata.PackageNotFoundError,
+            ):
+                with patch.object(selfupdate, "KIM_DIR", Path(tmpdir) / "nokimdir"):
+                    with patch("shutil.which", return_value=str(fake_bin)):
+                        result = selfupdate._detect_install_type()
+        self.assertEqual(result, "binary")
+
+
 class TestSelfUpdateEmptyVersion(unittest.TestCase):
+    """Guard against empty tag_name from the GitHub API."""
+
     def test_empty_tag_name_guard_present(self):
         import inspect
         from kim import selfupdate
@@ -259,28 +332,200 @@ class TestSelfUpdateEmptyVersion(unittest.TestCase):
             "Must guard against empty latest_version from GitHub API",
         )
 
-    def test_empty_tag_returns_early(self):
-        """Simulates GitHub API returning no tag_name; must not attempt update."""
+    def _fake_fetch(self, tag):
+        """Patch _fetch_latest_release to return a fake release dict."""
         from kim import selfupdate
 
-        fake_response_data = json.dumps({"tag_name": "", "assets": []}).encode()
+        fake = {"tag_name": tag, "assets": []}
+        return patch.object(selfupdate, "_fetch_latest_release", return_value=fake)
 
-        class FakeResponse:
-            def read(self):
-                return fake_response_data
+    def test_empty_tag_returns_early(self):
+        from kim import selfupdate
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                pass
-
-        with patch("urllib.request.urlopen", return_value=FakeResponse()):
+        with self._fake_fetch(""):
             with patch("builtins.print") as mock_print:
-                args = MagicMock(force=False)
-                selfupdate.cmd_selfupdate(args)
+                selfupdate.cmd_selfupdate(MagicMock(force=False))
                 printed = " ".join(str(c) for c in mock_print.call_args_list)
                 self.assertIn("Could not determine", printed)
+
+    def test_already_up_to_date(self):
+        from kim import selfupdate
+        from kim.core import VERSION
+
+        with self._fake_fetch(f"v{VERSION}"):
+            with patch("builtins.print") as mock_print:
+                selfupdate.cmd_selfupdate(MagicMock(force=False))
+                printed = " ".join(str(c) for c in mock_print.call_args_list)
+                self.assertIn("up to date", printed.lower())
+
+
+class TestSelfUpdatePipPath(unittest.TestCase):
+    """When install_type is pip, must call pip subprocess — not download binary."""
+
+    def test_pip_install_calls_pip_subprocess(self):
+        from kim import selfupdate
+
+        fake_release = {"tag_name": "v99.0.0", "assets": []}
+        ran = []
+
+        def fake_run(cmd, **kwargs):
+            ran.append(cmd)
+            return MagicMock(returncode=0)
+
+        with patch.object(selfupdate, "_detect_install_type", return_value="pip"):
+            with patch.object(
+                selfupdate, "_fetch_latest_release", return_value=fake_release
+            ):
+                with patch.object(selfupdate, "_update_via_pip") as mock_pip:
+                    selfupdate.cmd_selfupdate(MagicMock(force=True))
+                    mock_pip.assert_called_once()
+                    args_called = mock_pip.call_args[0]
+                    self.assertEqual(args_called[0], "99.0.0")
+
+    def test_pip_update_uses_sys_executable(self):
+        """_update_via_pip must invoke sys.executable -m pip, not bare 'pip'."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._update_via_pip)
+        self.assertIn(
+            "sys.executable",
+            src,
+            "_update_via_pip must use sys.executable to invoke pip",
+        )
+        self.assertIn(
+            "kim-reminder",
+            src,
+            "_update_via_pip must upgrade the 'kim-reminder' package",
+        )
+
+
+class TestSelfUpdateScriptPath(unittest.TestCase):
+    """Script install: must download kim.py asset, not a binary."""
+
+    def test_script_update_falls_back_to_pip_when_no_asset(self):
+        """If the release has no kim.py asset, fall back to pip upgrade."""
+        from kim import selfupdate
+
+        assets = [
+            {
+                "name": "kim-linux-x86_64",
+                "browser_download_url": "https://example.com/kim-linux-x86_64",
+            }
+        ]
+
+        with patch.object(selfupdate, "_update_via_pip") as mock_pip:
+            with patch("builtins.print"):
+                selfupdate._update_script(assets, "99.0.0")
+                mock_pip.assert_called_once()
+
+    def test_script_update_downloads_kimpy_asset(self):
+        """When a kim.py asset exists, download and replace ~/.kim/kim.py."""
+        from kim import selfupdate
+
+        fake_content = b"#!/usr/bin/env python3\nfrom kim.cli import main\n"
+        assets = [
+            {"name": "kim.py", "browser_download_url": "https://example.com/kim.py"}
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_kim_dir = Path(tmpdir)
+            fake_script = fake_kim_dir / "kim.py"
+            fake_script.write_text("# old version", encoding="utf-8")
+
+            def fake_download(url, dest, **kwargs):
+                dest.write_bytes(fake_content)
+                return fake_content[:4]
+
+            with patch.object(selfupdate, "KIM_DIR", fake_kim_dir):
+                with patch.object(
+                    selfupdate, "_download_to", side_effect=fake_download
+                ):
+                    with patch("builtins.print"):
+                        selfupdate._update_script(assets, "99.0.0")
+
+            # Script should now contain the new content
+            self.assertEqual(fake_script.read_bytes(), fake_content)
+
+
+class TestSelfUpdateBinaryIntegrity(unittest.TestCase):
+    """Binary downloads must pass magic-byte integrity checks."""
+
+    def test_html_response_rejected_on_unix(self):
+        """If download returns HTML, must not replace the binary."""
+        from kim import selfupdate
+
+        html_content = b"<html>Not Found</html>"
+        assets = [
+            {
+                "name": "kim-linux-x86_64",
+                "browser_download_url": "https://example.com/kim-linux-x86_64",
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_bin = Path(tmpdir) / "kim"
+            fake_bin.write_bytes(b"\x7fELF" + b"\x00" * 10)  # original
+
+            def fake_download(url, dest, **kwargs):
+                dest.write_bytes(html_content)
+                return html_content[:4]
+
+            with patch("shutil.which", return_value=str(fake_bin)):
+                with patch.object(
+                    selfupdate, "_download_to", side_effect=fake_download
+                ):
+                    with patch("platform.system", return_value="Linux"):
+                        with patch("platform.machine", return_value="x86_64"):
+                            with patch("builtins.print"):
+                                selfupdate._update_binary(assets, "99.0.0")
+
+            # Original binary must be untouched
+            self.assertEqual(fake_bin.read_bytes()[:4], b"\x7fELF")
+
+    def test_non_mz_rejected_on_windows(self):
+        """Windows exe download that isn't MZ must be rejected."""
+        from kim import selfupdate
+
+        bad_content = b"PKzip garbage content here"
+        assets = [
+            {
+                "name": "kim-windows-x86_64.exe",
+                "browser_download_url": "https://example.com/kim.exe",
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_exe = Path(tmpdir) / "kim.exe"
+            fake_exe.write_bytes(b"MZ" + b"\x00" * 10)  # original
+
+            def fake_download(url, dest, **kwargs):
+                dest.write_bytes(bad_content)
+                return bad_content[:4]
+
+            with patch("shutil.which", return_value=str(fake_exe)):
+                with patch.object(
+                    selfupdate, "_download_to", side_effect=fake_download
+                ):
+                    with patch("platform.system", return_value="Windows"):
+                        with patch("platform.machine", return_value="x86_64"):
+                            with patch("builtins.print"):
+                                selfupdate._update_binary(assets, "99.0.0")
+
+            # Original exe must be untouched
+            self.assertEqual(fake_exe.read_bytes()[:2], b"MZ")
+
+    def test_no_asset_for_platform_gives_clear_message(self):
+        """If no matching asset exists, must print a helpful message (not crash)."""
+        from kim import selfupdate
+
+        assets = []  # no assets at all
+        with patch("platform.system", return_value="Linux"):
+            with patch("platform.machine", return_value="x86_64"):
+                with patch("builtins.print") as mock_print:
+                    selfupdate._update_binary(assets, "99.0.0")
+                    printed = " ".join(str(c) for c in mock_print.call_args_list)
+                    self.assertIn("No prebuilt binary", printed)
 
 
 # ---------------------------------------------------------------------------
