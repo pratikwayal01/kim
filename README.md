@@ -160,19 +160,4 @@ kim uninstall
 
 ---
 
-## Roadmap
-
-- [x] CLI reminder management
-- [x] Interactive mode
-- [x] Export / import
-- [x] Self-update
-- [x] Uninstall command
-- [x] Config validation
-- [x] Slack notifications
-- [x] One-shot reminders
-- [x] Custom sound files
-- [x] Windows notifications
-
----
-
 *Start small. Keep it in mind.*
