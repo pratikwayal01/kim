@@ -86,7 +86,7 @@ kim remind "take a break" 1h
 kim remind "deploy window opens" 2h 30m
 ```
 
-**Persistence:** One-shot reminders are persisted to disk (`~/.kim/oneshots.json`) and will survive daemon restarts and system reboots. When the daemon starts, it loads any pending one-shot reminders and fires them at the scheduled time.
+**Persistence:** One-shot reminders are persisted to disk (`~/.kim/oneshots.json`) and will survive daemon restarts and system reboots. When the daemon starts, it loads any pending one-shot reminders and fires them at the scheduled time. Expired reminders are automatically cleaned up.
 
 ## Configuration
 

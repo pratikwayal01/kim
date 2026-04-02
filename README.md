@@ -64,7 +64,7 @@ kim remind "deploy window opens" in 2h 30m
 
 Fires once, runs in the background, frees your terminal immediately.
 
-**Persistent** — one-shot reminders survive daemon restarts and system reboots. Stored in `~/.kim/oneshots.json`.
+**Persistent** — one-shot reminders survive daemon restarts and system reboots. Stored in `~/.kim/oneshots.json` and loaded automatically when the daemon starts. Expired reminders are cleaned up on next startup.
 
 ---
 

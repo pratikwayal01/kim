@@ -2,6 +2,15 @@
 
 Configuration is stored in `~/.kim/config.json`. The file is created on first run with default reminders.
 
+## File Locations
+
+| File | Purpose |
+|---|---|
+| `~/.kim/config.json` | Main configuration (reminders, sound, Slack) |
+| `~/.kim/oneshots.json` | Persisted one-shot reminders (survives reboots) |
+| `~/.kim/kim.log` | Log file (rotated, max 5 MB × 3 backups) |
+| `~/.kim/kim.pid` | Daemon PID file |
+
 ## Config File Structure
 
 ```json
@@ -153,3 +162,32 @@ kim import reminders.csv --merge   # Merge with existing
   "sound_file": "/home/user/sounds/bell.mp3"
 }
 ```
+
+## One-shot Reminders
+
+One-shot reminders (created via `kim remind`) are stored separately in `~/.kim/oneshots.json`. This file is managed automatically by kim — you should not need to edit it manually.
+
+### Format
+
+```json
+[
+  {
+    "message": "standup call",
+    "title": "⏰ Reminder",
+    "fire_at": 1711632000.0
+  }
+]
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `message` | string | The reminder message |
+| `title` | string | Notification title |
+| `fire_at` | number | Unix timestamp when the reminder should fire |
+
+### Behavior
+
+- One-shot reminders are loaded by the daemon on startup
+- Expired reminders (past `fire_at`) are automatically cleaned up
+- Once fired, the reminder is removed from the file
+- Survives daemon restarts and system reboots

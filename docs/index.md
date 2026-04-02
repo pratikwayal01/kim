@@ -14,7 +14,7 @@
 - **Notifications**: System notifications via native APIs
 - **Sound**: Custom sound files or system default
 - **Slack integration**: Webhook or bot token
-- **One-shot reminders**: `kim remind "standup" in 10m`
+- **One-shot reminders**: `kim remind "standup" in 10m` — persisted to disk, survives reboots
 - **Interactive mode**: TUI for managing reminders
 - **Self-update**: Automatic updates from GitHub releases
 
@@ -47,8 +47,9 @@ kim remind "standup call" in 10m
 
 ## Documentation
 
+- [Home](index.md) — Overview and quick start
 - [Installation](installation.md) — Detailed installation instructions
-- [Configuration](configuration.md) — Config file reference
+- [Configuration](configuration.md) — Config file reference, one-shot storage
 - [Commands](commands.md) — All CLI commands
 - [Sound](sound.md) — Sound configuration
 - [Slack](slack.md) — Slack integration
