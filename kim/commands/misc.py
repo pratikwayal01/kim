@@ -372,7 +372,7 @@ BASH_COMPLETION = """_kim_completions() {
         remove|enable|disable|update)
             local config="$HOME/.kim/config.json"
             if [[ -f "$config" ]]; then
-                local names=$(python3 -c "import json; print(' '.join([r['name'] for r in json.load(open('$config')).get('reminders', [])]))" 2>/dev/null)
+                local names=$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null | tr '\n' ' ')
                 COMPREPLY=( $(compgen -W "${names}" -- ${cur}) )
             fi
             return 0
@@ -498,7 +498,7 @@ _kim() {
                     ;;
                 remove|enable|disable)
                     local -a names
-                    names=(${$(python3 -c "import json; [print(r['name']) for r in json.load(open('$HOME/.kim/config.json')).get('reminders', [])]" 2>/dev/null)})
+                    names=(${$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$HOME/.kim/config.json" 2>/dev/null)})
                     _arguments "1:reminder name:($names)"
                     ;;
                 remind)
@@ -543,7 +543,7 @@ _kim
 """
 
 FISH_COMPLETION = """complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
-complete -c kim -n "__fish_seen_subcommand_from remove enable disable update" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open('$HOME/.kim/config.json')).get('reminders',[])]\" 2>/dev/null)"
+complete -c kim -n "__fish_seen_subcommand_from remove enable disable update" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l interval -s I -d "Interval (e.g., 30m, 1h, 1d)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l title -s t -d "Notification title"
 complete -c kim -n "__fish_seen_subcommand_from add" -l message -s m -d "Notification message"

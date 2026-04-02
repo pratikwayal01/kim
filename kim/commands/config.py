@@ -139,6 +139,46 @@ def cmd_export(args):
         print(output)
 
 
+def _sanitize_reminder(r: dict) -> dict:
+    """Strip dangerous or unknown keys from a reminder dict."""
+    ALLOWED_KEYS = {
+        "name",
+        "interval",
+        "title",
+        "message",
+        "urgency",
+        "enabled",
+        "sound",
+        "sound_file",
+        "slack",
+    }
+    safe = {}
+    for k in ALLOWED_KEYS:
+        if k in r:
+            if k == "name" and isinstance(r[k], str):
+                safe[k] = r[k][:100].strip()
+            elif k == "interval" and isinstance(r[k], (str, int, float)):
+                safe[k] = r[k]
+            elif k in ("title", "message") and isinstance(r[k], str):
+                safe[k] = r[k][:500]
+            elif k == "urgency" and r[k] in ("low", "normal", "critical"):
+                safe[k] = r[k]
+            elif k == "enabled" and isinstance(r[k], bool):
+                safe[k] = r[k]
+            elif k == "sound" and isinstance(r[k], bool):
+                safe[k] = r[k]
+            elif k == "sound_file" and isinstance(r[k], str):
+                safe[k] = r[k][:500]
+            elif k == "slack" and isinstance(r[k], dict):
+                safe[k] = {
+                    "enabled": bool(r[k].get("enabled", False)),
+                    "webhook_url": str(r[k].get("webhook_url", ""))[:500],
+                    "bot_token": str(r[k].get("bot_token", ""))[:500],
+                    "channel": str(r[k].get("channel", "#general"))[:100],
+                }
+    return safe
+
+
 def cmd_import(args):
     path = Path(args.file)
     if not path.exists():
@@ -164,33 +204,53 @@ def cmd_import(args):
                 parts = line.split(",")
                 if len(parts) >= 6:
                     reminders.append(
-                        {
-                            "name": parts[0],
-                            "interval": parts[1]
-                            if not parts[1].isdigit()
-                            else int(parts[1]),
-                            "title": parts[2],
-                            "message": parts[3],
-                            "urgency": parts[4]
-                            if parts[4] in ["low", "normal", "critical"]
-                            else "normal",
-                            "enabled": parts[5].lower() == "true",
-                        }
+                        _sanitize_reminder(
+                            {
+                                "name": parts[0],
+                                "interval": parts[1]
+                                if not parts[1].isdigit()
+                                else int(parts[1]),
+                                "title": parts[2],
+                                "message": parts[3],
+                                "urgency": parts[4]
+                                if parts[4] in ["low", "normal", "critical"]
+                                else "normal",
+                                "enabled": parts[5].lower() == "true",
+                            }
+                        )
                     )
             imported_data = {"reminders": reminders, "sound": True}
         else:
-            imported_data = json.loads(content)
+            raw = json.loads(content)
+            imported_data = {
+                "reminders": [_sanitize_reminder(r) for r in raw.get("reminders", [])],
+                "sound": raw.get("sound", True),
+                "sound_file": raw.get("sound_file"),
+                "slack": {
+                    "enabled": bool(raw.get("slack", {}).get("enabled", False)),
+                    "webhook_url": str(raw.get("slack", {}).get("webhook_url", ""))[
+                        :500
+                    ],
+                    "bot_token": str(raw.get("slack", {}).get("bot_token", ""))[:500],
+                    "channel": str(raw.get("slack", {}).get("channel", "#general"))[
+                        :100
+                    ],
+                },
+            }
 
         config = load_config()
 
         if args.merge:
             existing_names = {r["name"] for r in config.get("reminders", [])}
             for r in imported_data.get("reminders", []):
-                if r["name"] not in existing_names:
+                if r.get("name") not in existing_names:
                     config.setdefault("reminders", []).append(r)
             action = "Merged"
         else:
-            config = imported_data
+            config["reminders"] = imported_data.get("reminders", [])
+            config["sound"] = imported_data.get("sound", True)
+            config["sound_file"] = imported_data.get("sound_file")
+            config["slack"] = imported_data.get("slack", config.get("slack", {}))
             action = "Imported"
 
         with open(CONFIG, "w", encoding="utf-8") as f:
