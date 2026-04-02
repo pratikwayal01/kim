@@ -4,6 +4,8 @@
 # │  installer for Linux & macOS                │
 # └─────────────────────────────────────────────┘
 # curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
+#
+# Uninstall: curl -fsSL ... | bash -s -- --uninstall
 
 set -euo pipefail
 
@@ -16,11 +18,59 @@ _warn()   { echo -e "${YELLOW}!${NC} $*"; }
 _die()    { echo -e "${RED}✗ $*${NC}"; exit 1; }
 _header() { echo -e "\n${BOLD}${BLUE}$*${NC}"; echo "──────────────────────────────"; }
 
-REPO="https://raw.githubusercontent.com/pratikwayal01/kim/main"
 BIN_DIR="$HOME/.local/bin"
 KIM_DIR="$HOME/.kim"
 OS="$(uname -s)"
 ARCH="$(uname -m)"
+
+# ── --uninstall flag (pure bash, works even when kim is broken) ────────────────
+if [[ "${1:-}" == "--uninstall" ]]; then
+    _header "Uninstalling kim"
+    printf "This will remove kim data, binaries, and autostart config.\nContinue? (y/N): "
+    read -r confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
+
+    # Stop any running daemon
+    if [[ -f "$KIM_DIR/kim.pid" ]]; then
+        pid=$(cat "$KIM_DIR/kim.pid" 2>/dev/null || true)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+            _ok "Stopped running daemon (PID $pid)"
+        fi
+        rm -f "$KIM_DIR/kim.pid"
+    fi
+
+    # Remove autostart
+    case "$OS" in
+        Linux)
+            systemctl --user stop kim.service 2>/dev/null || true
+            systemctl --user disable kim.service 2>/dev/null || true
+            systemctl --user daemon-reload 2>/dev/null || true
+            rm -f "$HOME/.config/systemd/user/kim.service"
+            _ok "Removed systemd service"
+            ;;
+        Darwin)
+            plist="$HOME/Library/LaunchAgents/io.kim.reminder.plist"
+            launchctl unload "$plist" 2>/dev/null || true
+            rm -f "$plist"
+            _ok "Removed launchd agent"
+            ;;
+    esac
+
+    # Remove binary shim
+    rm -f "$BIN_DIR/kim"
+    _ok "Removed $BIN_DIR/kim"
+
+    # Remove data directory
+    rm -rf "$KIM_DIR"
+    _ok "Removed $KIM_DIR"
+
+    _header "Done"
+    echo -e "${GREEN}kim has been completely uninstalled.${NC}"
+    exit 0
+fi
 
 _header "kim — keep in mind"
 _info "OS     : $OS ($ARCH)"
@@ -77,42 +127,39 @@ fi
 _header "Installing kim"
 mkdir -p "$BIN_DIR" "$KIM_DIR"
 
+# Clean stale state so re-runs after failures always work
+rm -rf "$KIM_DIR/kim"
+rm -f "$KIM_DIR/kim.py"
+
 if [[ "${KIM_LOCAL:-0}" == "1" ]]; then
-    # Local mode: used when running from cloned repo
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cp "$SCRIPT_DIR/kim.py" "$KIM_DIR/kim.py"
     cp -r "$SCRIPT_DIR/kim" "$KIM_DIR/kim"
     _ok "Copied kim package from local source"
 else
     _info "Downloading kim package..."
     ZIP_URL="https://github.com/pratikwayal01/kim/archive/refs/heads/main.zip"
     ZIP_PATH="/tmp/kim-main.zip"
-    EXTRACT_PATH="/tmp/kim-main"
-    
+    EXTRACT_PATH="/tmp/kim-install"
+
     curl -fsSL "$ZIP_URL" -o "$ZIP_PATH"
     _ok "Downloaded package"
-    
-    # Remove previous extraction if exists
+
     rm -rf "$EXTRACT_PATH"
     unzip -q "$ZIP_PATH" -d "$EXTRACT_PATH"
     _ok "Extracted package"
-    
-    # Copy kim.py and kim/ folder to install directory
-    cp "$EXTRACT_PATH/kim-main/kim.py" "$KIM_DIR/kim.py"
+
     cp -r "$EXTRACT_PATH/kim-main/kim" "$KIM_DIR/kim"
     _ok "Installed to $KIM_DIR"
-    
-    # Cleanup
+
     rm -f "$ZIP_PATH"
     rm -rf "$EXTRACT_PATH"
 fi
 
-chmod +x "$KIM_DIR/kim.py"
-
-# ── Create the kim shim in PATH ───────────────────────────────────────────────
+# ── Create the kim shim in PATH (uses python -m kim) ──────────────────────────
 cat > "$BIN_DIR/kim" <<EOF
 #!/usr/bin/env bash
-exec "$PYTHON_PATH" "$KIM_DIR/kim.py" "\$@"
+export PYTHONPATH="$KIM_DIR:\$PYTHONPATH"
+exec "$PYTHON_PATH" -m kim "\$@"
 EOF
 chmod +x "$BIN_DIR/kim"
 _ok "Created: $BIN_DIR/kim"
@@ -147,12 +194,16 @@ if ! echo "$PATH" | grep -q "$BIN_DIR"; then
     esac
 fi
 
-# ── Startup setup ─────────────────────────────────────────────────────────────
+# ── Startup setup (non-fatal — install succeeds even if autostart fails) ──────
 _header "Setting up autostart"
 
 case "$OS" in
-# ── Linux: systemd user service ───────────────────────────────────────────────
 Linux)
+    if ! command -v systemctl &>/dev/null; then
+        _warn "systemctl not found — skipping autostart setup"
+        _warn "Run 'kim start' manually to start the daemon"
+        break
+    fi
     SERVICE_DIR="$HOME/.config/systemd/user"
     mkdir -p "$SERVICE_DIR"
     UID_NUM=$(id -u)
@@ -176,19 +227,19 @@ WorkingDirectory=$KIM_DIR
 WantedBy=default.target
 EOF
 
-    systemctl --user daemon-reload
-    systemctl --user enable kim.service
-    systemctl --user restart kim.service
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable kim.service 2>/dev/null || true
+    systemctl --user restart kim.service 2>/dev/null || true
     sleep 1
 
-    if systemctl --user is-active --quiet kim.service; then
+    if systemctl --user is-active --quiet kim.service 2>/dev/null; then
         _ok "systemd service running"
     else
         _warn "Service may have failed: systemctl --user status kim.service"
+        _warn "You can still run 'kim start' manually"
     fi
     ;;
 
-# ── macOS: launchd agent ──────────────────────────────────────────────────────
 Darwin)
     PLIST="$HOME/Library/LaunchAgents/io.kim.reminder.plist"
     mkdir -p "$HOME/Library/LaunchAgents"
@@ -219,13 +270,15 @@ Darwin)
 EOF
 
     launchctl unload "$PLIST" 2>/dev/null || true
-    launchctl load "$PLIST"
-    _ok "launchd agent loaded"
+    launchctl load "$PLIST" 2>/dev/null || {
+        _warn "launchctl load failed — try: launchctl load $PLIST"
+    }
+    _ok "launchd agent configured"
     ;;
 esac
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-_header "Done 🎉"
+_header "Done"
 echo -e "  ${BOLD}kim${NC} is installed and running.\n"
 echo -e "  ${CYAN}Commands:${NC}"
 echo "    kim status          → show what's running"
