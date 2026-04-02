@@ -27,12 +27,25 @@ def cmd_remind(args):
         total_seconds += {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit] * value
 
     if total_seconds == 0:
-        print("Couldn't parse time. Examples: 'in 10m', 'in 1h', 'in 2h 30m'")
+        try:
+            fallback = float(raw) * 60
+            if fallback > 0:
+                total_seconds = fallback
+        except (ValueError, TypeError):
+            pass
+
+    if total_seconds <= 0:
+        print("Couldn't parse time. Examples: 'in 10m', 'in 1h', 'in 2h 30m', 'in 90s'")
+        sys.exit(1)
+
+    if total_seconds > 365 * 24 * 3600:
+        print("Duration too large (max 365 days).")
         sys.exit(1)
 
     message = args.message
-    # Default title: "Reminder" on Windows, "⏰ Reminder" elsewhere
-    title = args.title or ("Reminder" if ALARM == "Reminder" else f"{ALARM} Reminder")
+    title = args.title or (
+        "Reminder" if platform.system() == "Windows" else f"{ALARM} Reminder"
+    )
     sleep_seconds = total_seconds
 
     parts = []
@@ -44,7 +57,7 @@ def cmd_remind(args):
     display = " ".join(parts)
 
     print(f"{title} set: '{message}' in {display}")
-    log.info(f"One-shot reminder set: '{message}' in {display}")
+    log.info("One-shot reminder set: '%s' in %s", message, display)
 
     # Save one-shot reminder for persistence across reboots
     fire_time = time.time() + sleep_seconds
@@ -62,12 +75,11 @@ def cmd_remind(args):
     oneshots.append(oneshot)
     try:
         ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
-        log.debug(f"Saved one-shot reminder to {ONESHOT_FILE}")
+        log.debug("Saved one-shot reminder to %s", ONESHOT_FILE)
     except OSError as e:
-        log.warning(f"Could not save one-shot reminder: {e}")
+        log.warning("Could not save one-shot reminder: %s", e)
 
     if platform.system() == "Windows":
-        # Spawn background process using PowerShell with hidden window
         cmd = [
             "powershell",
             "-WindowStyle",
@@ -75,37 +87,44 @@ def cmd_remind(args):
             "-Command",
             f'python -m kim _remind-fire --message "{message}" --title "{title}" --seconds {sleep_seconds}',
         ]
-        subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        )
+        try:
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=0x08000000,
+            )
+        except FileNotFoundError:
+            log.error("powershell not found for one-shot reminder")
+            print("Error: could not spawn background process.")
+            sys.exit(1)
         return
 
-    # Unix: fork a background child
     pid = os.fork()
     if pid > 0:
-        return  # parent returns immediately
+        return
 
-    # Child process: sleep then fire
-    config = load_config()
-    sound = config.get("sound", True)
-    sound_file = config.get("sound_file") or None
-    slack_config = config.get("slack", {})
+    try:
+        config = load_config()
+        sound = config.get("sound", True)
+        sound_file = config.get("sound_file") or None
+        slack_config = config.get("slack", {})
 
-    time.sleep(sleep_seconds)
-    notify(
-        title,
-        message,
-        urgency="critical",
-        sound=sound,
-        sound_file=sound_file,
-        slack_config=slack_config if slack_config.get("enabled") else None,
-    )
-    log.info(f"One-shot reminder fired: '{message}'")
-    sys.exit(0)
+        time.sleep(sleep_seconds)
+        notify(
+            title,
+            message,
+            urgency="critical",
+            sound=sound,
+            sound_file=sound_file,
+            slack_config=slack_config if slack_config.get("enabled") else None,
+        )
+        log.info("One-shot reminder fired: %s", message)
+    except Exception:
+        log.exception("One-shot reminder child process failed")
+    finally:
+        sys.exit(0)
 
 
 def cmd_remind_fire(args):
@@ -123,7 +142,7 @@ def cmd_remind_fire(args):
         sound_file=sound_file,
         slack_config=slack_config if slack_config.get("enabled") else None,
     )
-    log.info(f"One-shot reminder fired: '{args.message}'")
+    log.info("One-shot reminder fired: '%s'", args.message)
 
 
 def load_oneshot_reminders():
@@ -147,7 +166,7 @@ def load_oneshot_reminders():
             )
         return valid
     except (json.JSONDecodeError, OSError) as e:
-        log.warning(f"Could not load one-shot reminders: {e}")
+        log.warning("Could not load one-shot reminders: %s", e)
         return []
 
 
@@ -217,21 +236,25 @@ def cmd_sound(args):
         config["sound_file"] = path
         config["sound"] = True
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"Error writing config file: {e}")
             sys.exit(1)
         print(f"{CHECK} Custom sound set: {path}")
         print("  Restart kim ('kim stop && kim start') to apply.")
-        log.info(f"sound_file set to: {path}")
+        log.info("sound_file set to: %s", path)
         return
 
     if args.clear:
         config["sound_file"] = None
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"Error writing config file: {e}")
             sys.exit(1)
@@ -268,8 +291,10 @@ def cmd_sound(args):
     if args.enable:
         config["sound"] = True
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"Error writing config file: {e}")
             sys.exit(1)
@@ -279,8 +304,10 @@ def cmd_sound(args):
     if args.disable:
         config["sound"] = False
         try:
-            with open(CONFIG, "w") as f:
+            with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
+            if platform.system() != "Windows":
+                os.chmod(CONFIG, 0o600)
         except OSError as e:
             print(f"Error writing config file: {e}")
             sys.exit(1)
