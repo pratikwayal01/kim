@@ -24,11 +24,16 @@ from .misc import load_oneshot_reminders, remove_oneshot
 def cmd_start(args):
     if PID_FILE.exists():
         try:
-            pid = PID_FILE.read_text(encoding="utf-8").strip()
-            print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
-            sys.exit(1)
-        except (OSError, UnicodeDecodeError) as e:
-            print(f"Could not read PID file: {e}. Removing stale PID file.")
+            pid_str = PID_FILE.read_text(encoding="utf-8").strip()
+            pid = int(pid_str)
+            if _is_process_running(pid):
+                print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
+                sys.exit(1)
+            else:
+                log.info("Removing stale PID file (PID %s not running)", pid)
+                PID_FILE.unlink(missing_ok=True)
+        except (OSError, UnicodeDecodeError, ValueError) as e:
+            log.warning("Could not read PID file: %s. Removing.", e)
             PID_FILE.unlink(missing_ok=True)
 
     config = load_config()
@@ -50,10 +55,11 @@ def cmd_start(args):
             sound_file = None
 
     try:
-        PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
-        # Set secure permissions on PID file
+        pid_tmp = PID_FILE.with_suffix(".tmp")
+        pid_tmp.write_text(str(os.getpid()), encoding="utf-8")
         if platform.system() != "Windows":
-            os.chmod(PID_FILE, 0o600)
+            os.chmod(pid_tmp, 0o600)
+        pid_tmp.replace(PID_FILE)
     except OSError as e:
         print(f"Error writing PID file: {e}")
         sys.exit(1)
@@ -67,7 +73,7 @@ def cmd_start(args):
         print(f"  Sound: {sound_file}")
     print(f"Log: {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}")
 
-    log.info(f"kim v{VERSION} started {EM_DASH} PID {os.getpid()}")
+    log.info("kim v%s started %s PID %s", VERSION, EM_DASH, os.getpid())
 
     # ── Build a notifier that uses KIM's existing notify() with sound + slack ──
     _slack = slack_config if slack_config.get("enabled") else None
@@ -85,7 +91,7 @@ def cmd_start(args):
             sound_file=sound_file,
             slack_config=_slack,
         )
-        log.info(f"[{reminder.get('name')}] fired")
+        log.info("[%s] fired", reminder.get("name"))
 
         # If this was a one-shot, remove from persistence
         if is_oneshot and fire_at is not None:
@@ -110,17 +116,22 @@ def cmd_start(args):
         signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
-    notify(
-        "✅ kim started",
-        f"{len(active)} reminder(s): " + ", ".join(r["name"] for r in active),
-        urgency="low",
-        sound=False,
-        slack_config=_slack,
-    )
+    try:
+        notify(
+            "kim started",
+            "{} reminder(s): {}".format(
+                len(active), ", ".join(r["name"] for r in active)
+            ),
+            urgency="low",
+            sound=False,
+            slack_config=_slack,
+        )
+    except Exception:
+        log.exception("Startup notification failed")
 
     # Add persisted one-shot reminders to scheduler BEFORE starting
     if oneshots:
-        log.info(f"Loading {len(oneshots)} persisted one-shot reminder(s)")
+        log.info("Loading %d persisted one-shot reminder(s)", len(oneshots))
         for o in oneshots:
             oneshot_reminder = {
                 "name": f"oneshot-{int(o['fire_at'])}",
@@ -191,7 +202,7 @@ def cmd_stop(args):
         # so we always remove the PID file here on all platforms.
         PID_FILE.unlink(missing_ok=True)
         print(f"kim stopped (PID {pid}).")
-        log.info(f"Stopped by user (PID {pid})")
+        log.info("Stopped by user (PID %d)", pid)
     except ProcessLookupError:
         print("Process not found — cleaning up stale PID file.")
         PID_FILE.unlink(missing_ok=True)
