@@ -1218,15 +1218,19 @@
 </tbody>
 </table>
 <h3 id="kim-add"><code>kim add</code><a class="headerlink" href="#kim-add" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kim<span class="w"> </span>add<span class="w"> </span>NAME<span class="w"> </span>-I<span class="w"> </span>INTERVAL<span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kim<span class="w"> </span>add<span class="w"> </span>NAME<span class="w"> </span>-I<span class="w"> </span>INTERVAL<span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
 </code></pre></div>
 <p><strong>Options:</strong>
 - <code>-I, --interval</code> — Interval (e.g., <code>30m</code>, <code>1h</code>, <code>1d</code>, or just number for minutes) [required]
 - <code>-t, --title</code> — Notification title
-- <code>-m, --message</code> — Notification message<br />
-- <code>-u, --urgency</code> — <code>low</code>, <code>normal</code>, <code>critical</code> (default: <code>normal</code>)</p>
+- <code>-m, --message</code> — Notification message
+- <code>-u, --urgency</code> — <code>low</code>, <code>normal</code>, <code>critical</code> (default: <code>normal</code>)
+- <code>--sound-file</code> — Per-reminder sound file path (overrides global)
+- <code>--slack-channel</code> — Per-reminder Slack channel
+- <code>--slack-webhook</code> — Per-reminder Slack webhook URL</p>
 <p><strong>Example:</strong>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kim<span class="w"> </span>add<span class="w"> </span>eye-break<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>-t<span class="w"> </span><span class="s2">&quot;👁️ Eye Break&quot;</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Look away from screen&quot;</span><span class="w"> </span>-u<span class="w"> </span>critical
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kim<span class="w"> </span>add<span class="w"> </span>standup<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>--slack-channel<span class="w"> </span><span class="s2">&quot;#standup&quot;</span><span class="w"> </span>--sound-file<span class="w"> </span>~/sounds/urgent.wav
 </code></pre></div></p>
 <h3 id="kim-remove"><code>kim remove</code><a class="headerlink" href="#kim-remove" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kim<span class="w"> </span>remove<span class="w"> </span>NAME
@@ -1236,8 +1240,12 @@
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kim<span class="w"> </span>disable<span class="w"> </span>NAME
 </code></pre></div>
 <h3 id="kim-update"><code>kim update</code><a class="headerlink" href="#kim-update" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kim<span class="w"> </span>update<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>-i<span class="w"> </span>INTERVAL<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--enable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--disable<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kim<span class="w"> </span>update<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>INTERVAL<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--enable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--disable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
 </code></pre></div>
+<p><strong>New options:</strong>
+- <code>--sound-file</code> — Set per-reminder sound file
+- <code>--slack-channel</code> — Set per-reminder Slack channel
+- <code>--slack-webhook</code> — Set per-reminder Slack webhook URL</p>
 <h2 id="one-shot-reminders">One-shot Reminders<a class="headerlink" href="#one-shot-reminders" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>remind<span class="w"> </span>MESSAGE<span class="w"> </span>TIME<span class="w"> </span><span class="o">[</span>TIME<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span>
 </code></pre></div>
