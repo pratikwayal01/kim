@@ -5,6 +5,7 @@ Sound playback and validation for kim.
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Tuple
 
 from .core import log
 
@@ -184,7 +185,7 @@ def _play_system_default_sound(system: str) -> None:
                 break
 
 
-def validate_sound_file(path: str) -> tuple[bool, str]:
+def validate_sound_file(path: str) -> Tuple[bool, str]:
     """
     Validate that a sound file exists and has a recognised audio extension.
     Returns (ok: bool, error_message: str).

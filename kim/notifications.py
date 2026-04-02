@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import urllib.error
 import urllib.request
+from typing import Optional
 
 from .core import log
 from .sound import play_sound_file
@@ -30,10 +31,15 @@ def _notify_linux(title, message, urgency, sound, sound_file=None):
     u = urgency if urgency in ("low", "normal", "critical") else "normal"
     try:
         subprocess.run(
-            ["notify-send", "--urgency", u, title, message], env=env, check=True
+            ["notify-send", "--urgency", u, title, message],
+            env=env,
+            check=True,
+            timeout=5,
         )
     except FileNotFoundError:
         log.error("notify-send not found. Install libnotify.")
+    except subprocess.TimeoutExpired:
+        log.warning("notify-send timed out")
     except Exception as e:
         log.error("notify-send: %s", e)
 
@@ -73,9 +79,12 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
         subprocess.run(
             ["osascript", "-e", f'display notification "{m}" with title "{t}" {snd}'],
             check=True,
+            timeout=5,
         )
     except FileNotFoundError:
         log.error("osascript not found. Is this macOS?")
+    except subprocess.TimeoutExpired:
+        log.warning("osascript timed out")
     except Exception as e:
         log.error("osascript: %s", e)
 
@@ -114,15 +123,16 @@ $n.Dispose()
     except Exception as e:
         log.warning("Balloon notification failed: %s", e)
 
-    # Always play a beep as fallback/confirmation
-    try:
-        subprocess.run(
-            ["powershell", "-Command", "[console]::beep(800,200)"],
-            capture_output=True,
-            timeout=1,
-        )
-    except Exception:
-        pass
+    # Play a beep as fallback/confirmation — only when sound is enabled
+    if sound:
+        try:
+            subprocess.run(
+                ["powershell", "-Command", "[console]::beep(800,200)"],
+                capture_output=True,
+                timeout=2,
+            )
+        except Exception:
+            pass
 
     # Play sound file if specified (or system default if sound=True but no custom file)
     if sound or sound_file:
@@ -135,8 +145,8 @@ def notify(
     message: str,
     urgency: str = "normal",
     sound: bool = True,
-    sound_file: str | None = None,
-    slack_config: dict | None = None,
+    sound_file: Optional[str] = None,
+    slack_config: Optional[dict] = None,
 ):
     system = platform.system()
     log.debug("notify [%s] -> %s", urgency, title)
@@ -176,7 +186,7 @@ def _notify_slack_webhook(title: str, message: str, webhook_url: str) -> None:
             webhook_url, data=data, headers={"Content-Type": "application/json"}
         )
         urllib.request.urlopen(req, timeout=10)
-        log.debug("Slack webhook notification sent: %s", title)
+        log.debug("Slack webhook notification sent")
     except urllib.error.URLError as e:
         log.error("Slack webhook error: %s", e)
     except Exception as e:
@@ -211,7 +221,7 @@ def _notify_slack_bot(
             },
         )
         urllib.request.urlopen(req, timeout=10)
-        log.debug("Slack bot notification sent: %s", title)
+        log.debug("Slack bot notification sent")
     except urllib.error.URLError as e:
         log.error("Slack bot error: %s", e)
     except Exception as e:

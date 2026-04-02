@@ -75,12 +75,14 @@ def cmd_remind(args):
             oneshots = []
     oneshots.append(oneshot)
     try:
-        ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
+        _tmp = ONESHOT_FILE.with_suffix(".tmp")
+        _tmp.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
         if platform.system() != "Windows":
             try:
-                os.chmod(ONESHOT_FILE, 0o600)
+                os.chmod(_tmp, 0o600)
             except OSError:
                 pass
+        _tmp.replace(ONESHOT_FILE)
         log.debug("Saved one-shot reminder to %s", ONESHOT_FILE)
     except OSError as e:
         log.warning("Could not save one-shot reminder: %s", e)
@@ -163,6 +165,21 @@ def cmd_remind_fire(args):
     )
     log.info("One-shot reminder fired: '%s'", args.message)
 
+    # Clean up the entry from oneshots.json so it doesn't re-fire on next
+    # daemon start.  We match by fire_at (current time + seconds that elapsed).
+    fire_at = time.time()  # approximate — within a few ms of the actual time
+    if ONESHOT_FILE.exists():
+        try:
+            oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            # Remove entries whose fire_at is in the past (already fired)
+            now = fire_at
+            remaining = [o for o in oneshots if o.get("fire_at", 0) > now]
+            _tmp = ONESHOT_FILE.with_suffix(".tmp")
+            _tmp.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+            _tmp.replace(ONESHOT_FILE)
+        except (json.JSONDecodeError, OSError) as e:
+            log.warning("Could not clean up oneshots.json after fire: %s", e)
+
 
 def load_oneshot_reminders():
     """
@@ -178,8 +195,13 @@ def load_oneshot_reminders():
         # Filter out oneshots that have already fired (past fire_at)
         valid = [o for o in oneshots if o.get("fire_at", 0) > now]
         if len(valid) != len(oneshots):
-            # Clean up expired oneshots
-            ONESHOT_FILE.write_text(json.dumps(valid, indent=2), encoding="utf-8")
+            # Clean up expired oneshots atomically
+            try:
+                _tmp = ONESHOT_FILE.with_suffix(".tmp")
+                _tmp.write_text(json.dumps(valid, indent=2), encoding="utf-8")
+                _tmp.replace(ONESHOT_FILE)
+            except OSError as e:
+                log.warning("Could not clean up expired one-shots: %s", e)
             log.info(
                 "Cleaned up %d expired one-shot reminders", len(oneshots) - len(valid)
             )
@@ -195,10 +217,12 @@ def remove_oneshot(fire_at):
         return
     try:
         oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
-        oneshots = [o for o in oneshots if o.get("fire_at") != fire_at]
-        ONESHOT_FILE.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
-    except (json.JSONDecodeError, OSError):
-        pass
+        remaining = [o for o in oneshots if o.get("fire_at") != fire_at]
+        _tmp = ONESHOT_FILE.with_suffix(".tmp")
+        _tmp.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+        _tmp.replace(ONESHOT_FILE)
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("Could not update oneshots.json: %s", e)
 
 
 def cmd_slack(args):
