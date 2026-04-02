@@ -472,6 +472,9 @@ _kim() {
             ;;
         args)
             case $line[1] in
+                start|stop|status|list|validate|interactive|uninstall|completion|edit)
+                    # These commands take no arguments
+                    ;;
                 add)
                     _arguments \
                         "(-I --interval)"{-I,--interval}"[Interval (e.g., 30m, 1h, 1d)]" \
@@ -547,9 +550,12 @@ _kim() {
 _kim
 """
 
-FISH_COMPLETION = r"""complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
+FISH_COMPLETION = r"""# Suppress file completions for all known subcommands
+complete -c kim -n "__fish_seen_subcommand_from start stop status list logs edit validate interactive uninstall completion" -f
+# Subcommands with reminder name arguments
 complete -c kim -n "__fish_seen_subcommand_from remove enable disable" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
-complete -c kim -n "__fish_seen_subcommand_from update; and not __fish_seen_subcommand_from update -a" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
+complete -c kim -n "__fish_seen_subcommand_from update" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
+# add flags
 complete -c kim -n "__fish_seen_subcommand_from add" -l interval -s I -d "Interval (e.g., 30m, 1h, 1d)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l title -s t -d "Notification title"
 complete -c kim -n "__fish_seen_subcommand_from add" -l message -s m -d "Notification message"
@@ -557,18 +563,27 @@ complete -c kim -n "__fish_seen_subcommand_from add" -l urgency -s u -x -a "low 
 complete -c kim -n "__fish_seen_subcommand_from add" -l sound-file -d "Per-reminder sound file"
 complete -c kim -n "__fish_seen_subcommand_from add" -l slack-channel -d "Per-reminder Slack channel"
 complete -c kim -n "__fish_seen_subcommand_from add" -l slack-webhook -d "Per-reminder Slack webhook URL"
+# remind flags
 complete -c kim -n "__fish_seen_subcommand_from remind" -l title -s t -d "Notification title"
+# sound flags
 complete -c kim -n "__fish_seen_subcommand_from sound" -l set -d "Set custom sound file"
 complete -c kim -n "__fish_seen_subcommand_from sound" -l clear -d "Revert to system default"
 complete -c kim -n "__fish_seen_subcommand_from sound" -l test -d "Play current sound"
 complete -c kim -n "__fish_seen_subcommand_from sound" -l enable -d "Enable sound"
 complete -c kim -n "__fish_seen_subcommand_from sound" -l disable -d "Disable sound"
+# slack flags
 complete -c kim -n "__fish_seen_subcommand_from slack" -l test -d "Send test notification"
+complete -c kim -n "__fish_seen_subcommand_from slack" -l title -s t -d "Test title"
+complete -c kim -n "__fish_seen_subcommand_from slack" -l message -s m -d "Test message"
+# export flags
 complete -c kim -n "__fish_seen_subcommand_from export" -l format -s f -x -a "json csv"
 complete -c kim -n "__fish_seen_subcommand_from export" -l output -s o -d "Output file"
+# import flags
 complete -c kim -n "__fish_seen_subcommand_from import" -l format -s f -x -a "json csv auto"
 complete -c kim -n "__fish_seen_subcommand_from import" -l merge -d "Merge with existing"
+# logs flags
 complete -c kim -n "__fish_seen_subcommand_from logs" -l lines -s n -d "Number of lines"
+# update flags
 complete -c kim -n "__fish_seen_subcommand_from update" -l interval -s I -d "New interval"
 complete -c kim -n "__fish_seen_subcommand_from update" -l title -s t -d "New title"
 complete -c kim -n "__fish_seen_subcommand_from update" -l message -s m -d "New message"
@@ -578,6 +593,7 @@ complete -c kim -n "__fish_seen_subcommand_from update" -l disable -d "Disable r
 complete -c kim -n "__fish_seen_subcommand_from update" -l sound-file -d "Per-reminder sound file"
 complete -c kim -n "__fish_seen_subcommand_from update" -l slack-channel -d "Per-reminder Slack channel"
 complete -c kim -n "__fish_seen_subcommand_from update" -l slack-webhook -d "Per-reminder Slack webhook URL"
+# self-update flags
 complete -c kim -n "__fish_seen_subcommand_from self-update" -l force -s f -d "Skip confirmation"
 """
 
