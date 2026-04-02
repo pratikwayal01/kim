@@ -88,20 +88,14 @@ def cmd_remind(args):
         log.warning("Could not save one-shot reminder: %s", e)
 
     if platform.system() == "Windows":
-        # Resolve the real Python interpreter, bypassing Windows Store stubs.
-        # Store stubs live under WindowsApps and silently fail when spawned
-        # without a console via CREATE_NO_WINDOW.
-        import shutil
-
-        real_python = shutil.which("python") or sys.executable
-        # Prefer pythonw.exe (no-console variant shipped alongside python.exe)
-        # so we don't need CREATE_NO_WINDOW at all.
-        pythonw = Path(real_python).parent / "pythonw.exe"
-        interpreter = str(pythonw) if pythonw.exists() else real_python
-
+        # Spawn via "cmd /c kim ..." so we go through the installed kim.bat.
+        # This avoids all Windows Store Python stub issues — cmd.exe resolves
+        # the .bat on PATH and invokes it with a proper console context.
+        # Pass args as a list so subprocess handles quoting; don't build a
+        # shell string to avoid double-quoting issues with argparse.
         cmd = [
-            interpreter,
-            "-m",
+            "cmd",
+            "/c",
             "kim",
             "_remind-fire",
             "--message",
@@ -122,11 +116,11 @@ def cmd_remind(args):
                 stdout=subprocess.DEVNULL,
                 stderr=log_fd,
                 stdin=subprocess.DEVNULL,
-                # DETACHED_PROCESS (0x8) + CREATE_NO_WINDOW (0x8000000)
-                creationflags=0x00000008 | 0x08000000,
+                # CREATE_NO_WINDOW — cmd.exe window stays hidden
+                creationflags=0x08000000,
             )
         except FileNotFoundError:
-            log.error("python not found for one-shot reminder")
+            log.error("cmd.exe not found — cannot spawn background process")
             print("Error: could not spawn background process.")
             sys.exit(1)
         finally:
