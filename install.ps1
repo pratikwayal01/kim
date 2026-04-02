@@ -74,9 +74,9 @@ if ($local) {
     Expand-Archive -Path $zipPath -DestinationPath $extractPath
     Ok "Extracted package"
     
-    # Copy kim.py and kim/ folder to install directory
-    Copy-Item "$extractPath\kim-main\kim.py" -Destination $KimDir -Force
-    Copy-Item "$extractPath\kim-main\kim" -Destination $KimDir -Recurse -Force
+     # Copy kim.py and kim/ folder to install directory
+     Copy-Item "$extractPath\kim\kim.py" -Destination $KimDir -Force
+     Copy-Item "$extractPath\kim\kim" -Destination $KimDir -Recurse -Force
     Ok "Installed to $KimDir"
     
     # Cleanup
