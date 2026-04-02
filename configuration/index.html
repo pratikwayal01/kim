@@ -511,6 +511,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#file-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Locations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#config-file-structure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -682,6 +693,45 @@
     <span class="md-ellipsis">
       
         Custom Sound
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-shot-reminders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot Reminders
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="One-shot Reminders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
       
     </span>
   </a>
@@ -863,6 +913,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#file-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Locations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#config-file-structure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1045,6 +1106,45 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#one-shot-reminders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot Reminders
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="One-shot Reminders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1067,6 +1167,33 @@
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
 <p>Configuration is stored in <code>~/.kim/config.json</code>. The file is created on first run with default reminders.</p>
+<h2 id="file-locations">File Locations<a class="headerlink" href="#file-locations" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>~/.kim/config.json</code></td>
+<td>Main configuration (reminders, sound, Slack)</td>
+</tr>
+<tr>
+<td><code>~/.kim/oneshots.json</code></td>
+<td>Persisted one-shot reminders (survives reboots)</td>
+</tr>
+<tr>
+<td><code>~/.kim/kim.log</code></td>
+<td>Log file (rotated, max 5 MB × 3 backups)</td>
+</tr>
+<tr>
+<td><code>~/.kim/kim.pid</code></td>
+<td>Daemon PID file</td>
+</tr>
+</tbody>
+</table>
 <h2 id="config-file-structure">Config File Structure<a class="headerlink" href="#config-file-structure" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;reminders&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
@@ -1279,6 +1406,50 @@
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;sound_file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/home/user/sounds/bell.mp3&quot;</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">}</span>
 </code></pre></div>
+<h2 id="one-shot-reminders">One-shot Reminders<a class="headerlink" href="#one-shot-reminders" title="Permanent link">&para;</a></h2>
+<p>One-shot reminders (created via <code>kim remind</code>) are stored separately in <code>~/.kim/oneshots.json</code>. This file is managed automatically by kim — you should not need to edit it manually.</p>
+<h3 id="format">Format<a class="headerlink" href="#format" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">[</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="p">{</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;⏰ Reminder&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nt">&quot;fire_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1711632000.0</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>The reminder message</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>string</td>
+<td>Notification title</td>
+</tr>
+<tr>
+<td><code>fire_at</code></td>
+<td>number</td>
+<td>Unix timestamp when the reminder should fire</td>
+</tr>
+</tbody>
+</table>
+<h3 id="behavior">Behavior<a class="headerlink" href="#behavior" title="Permanent link">&para;</a></h3>
+<ul>
+<li>One-shot reminders are loaded by the daemon on startup</li>
+<li>Expired reminders (past <code>fire_at</code>) are automatically cleaned up</li>
+<li>Once fired, the reminder is removed from the file</li>
+<li>Survives daemon restarts and system reboots</li>
+</ul>
 
 
 
