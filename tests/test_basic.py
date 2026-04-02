@@ -124,5 +124,39 @@ class TestSound(unittest.TestCase):
         os.unlink(fname)
 
 
+class TestEntryPoint(unittest.TestCase):
+    """Verify entry points exist and are importable."""
+
+    def test_kim_py_exists(self):
+        """The root kim.py entry point must exist for installers."""
+        repo_root = Path(__file__).parent.parent
+        kim_py = repo_root / "kim.py"
+        self.assertTrue(kim_py.exists(), f"Entry point missing: {kim_py}")
+        self.assertGreater(kim_py.stat().st_size, 0, "kim.py is empty")
+
+    def test_kim_package_importable(self):
+        """The kim package must be importable."""
+        import kim  # noqa: F401
+        from kim.cli import main  # noqa: F401
+        from kim.core import load_config  # noqa: F401
+
+    def test_kim_entry_point_runs(self):
+        """Verify kim.py can be executed without crashing."""
+        import subprocess
+
+        repo_root = Path(__file__).parent.parent
+        kim_py = repo_root / "kim.py"
+        result = subprocess.run(
+            [sys.executable, str(kim_py), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(
+            result.returncode, 0, f"kim.py --version failed: {result.stderr}"
+        )
+        self.assertIn("kim", result.stdout.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
