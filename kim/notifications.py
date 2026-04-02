@@ -88,8 +88,10 @@ def _notify_windows(title, message, urgency, sound, sound_file=None):
     try:
         t = title.replace("'", "''").replace("\n", " ")
         m = message.replace("'", "''").replace("\n", " ")
+        # Use CREATE_NEW_CONSOLE so notification process has proper window handle
         ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 $n = New-Object System.Windows.Forms.NotifyIcon
 $n.Icon = [System.Drawing.SystemIcons]::Information
 $n.Visible = $true
@@ -101,16 +103,26 @@ Start-Sleep -Seconds 6
 $n.Visible = $false
 $n.Dispose()
 '''
-        subprocess.run(
-            ["powershell", "-Command", ps],
+        subprocess.Popen(
+            ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=0x08000000,
         )
+        log.debug("Windows notification sent: %s", title)
     except FileNotFoundError:
         log.error("powershell not found. Is this Windows?")
     except Exception as e:
         log.warning("Balloon notification failed: %s", e)
+
+    # Always play a beep as fallback/confirmation
+    try:
+        subprocess.run(
+            ["powershell", "-Command", "[console]::beep(800,200)"],
+            capture_output=True,
+            timeout=1,
+        )
+    except Exception:
+        pass
 
     # Play sound file if specified (or system default if sound=True but no custom file)
     if sound or sound_file:
