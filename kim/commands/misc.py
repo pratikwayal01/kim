@@ -358,7 +358,7 @@ def cmd_sound(args):
 
 # ── Shell completion strings ──────────────────────────────────────────────────
 BASH_COMPLETION = r"""_kim_completions() {
-    local cur prev words cword
+    local cur prev cword
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     cword=$COMP_CWORD
@@ -369,73 +369,67 @@ BASH_COMPLETION = r"""_kim_completions() {
     # Word 1: complete subcommands
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
-        return
+        return 0
     fi
 
     local cmd="${COMP_WORDS[1]}"
 
+    # Helper: load reminder names from config
+    _kim_names() {
+        local config="$HOME/.kim/config.json"
+        if [[ -f "$config" ]]; then
+            python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null
+        fi
+    }
+
     case "$cmd" in
+        start|stop|status|list|validate|interactive|uninstall|completion)
+            # These commands take no arguments — suppress filename fallback
+            return 0
+            ;;
         remove|enable|disable)
-            local config="$HOME/.kim/config.json"
-            if [[ -f "$config" ]]; then
-                local names
-                names=$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null)
-                COMPREPLY=( $(compgen -W "$names" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "$(_kim_names)" -- "$cur") )
             ;;
         update)
             if [[ $cword -eq 2 ]]; then
-                local config="$HOME/.kim/config.json"
-                if [[ -f "$config" ]]; then
-                    local names
-                    names=$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null)
-                    COMPREPLY=( $(compgen -W "$names" -- "$cur") )
-                fi
-            elif [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "$(_kim_names)" -- "$cur") )
+            else
                 COMPREPLY=( $(compgen -W "--interval --title --message --urgency --enable --disable --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
             fi
             ;;
         add)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
             ;;
         remind)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--title -t" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--title -t" -- "$cur") )
             ;;
         sound)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
             ;;
         slack)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--test --title --message -t -m" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--test --title --message -t -m" -- "$cur") )
             ;;
         export)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--format --output -f -o" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--format --output -f -o" -- "$cur") )
             ;;
         import)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--format --merge -f" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--format --merge -f" -- "$cur") )
             ;;
         logs)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--lines -n" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--lines -n" -- "$cur") )
             ;;
         self-update)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--force -f" -- "$cur") )
-            fi
+            COMPREPLY=( $(compgen -W "--force -f" -- "$cur") )
+            ;;
+        edit)
+            # edit takes no extra arguments beyond the command
+            return 0
+            ;;
+        _remind-fire)
+            COMPREPLY=( $(compgen -W "--message --title --seconds" -- "$cur") )
             ;;
     esac
+    return 0
 }
 complete -F _kim_completions kim
 """
@@ -554,8 +548,8 @@ _kim
 """
 
 FISH_COMPLETION = r"""complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
-complete -c kim -n "__fish_seen_subcommand_from remove enable disable" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
-complete -c kim -n "__fish_seen_subcommand_from update; and not __fish_seen_subcommand_from update -a" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
+complete -c kim -n "__fish_seen_subcommand_from remove enable disable" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
+complete -c kim -n "__fish_seen_subcommand_from update; and not __fish_seen_subcommand_from update -a" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l interval -s I -d "Interval (e.g., 30m, 1h, 1d)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l title -s t -d "Notification title"
 complete -c kim -n "__fish_seen_subcommand_from add" -l message -s m -d "Notification message"
