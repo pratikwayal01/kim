@@ -246,10 +246,15 @@ def cmd_interactive(args):
             f"Interval [{r.get('interval') or r.get('interval_minutes', 30)}]: "
         ).strip()
         if new_interval:
-            try:
-                r["interval"] = int(new_interval)
-            except ValueError:
-                pass
+            # Preserve unit suffix if provided ("30m", "1h"); default to minutes
+            _iv = new_interval.lower()
+            if any(_iv.endswith(u) for u in ("m", "h", "d", "s")):
+                r["interval"] = _iv
+            else:
+                try:
+                    r["interval"] = f"{int(new_interval)}m"
+                except ValueError:
+                    pass
 
         new_title = input(f"Title [{r.get('title', '')}]: ").strip()
         if new_title:

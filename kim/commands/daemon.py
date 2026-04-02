@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..core import CONFIG, PID_FILE, VERSION, load_config, log
+from ..core import CONFIG, KIM_DIR, PID_FILE, VERSION, load_config, log
 from ..notifications import notify
 from ..sound import validate_sound_file
 from ..scheduler import KimScheduler
@@ -44,7 +44,7 @@ def cmd_start(args):
 
     if not active:
         print("No enabled reminders in config. Edit ~/.kim/config.json")
-        sys.exit(0)
+        sys.exit(1)
 
     # Validate global sound_file at startup so users get an early warning
     if global_sound and global_sound_file:
@@ -71,7 +71,12 @@ def cmd_start(args):
         print(f"  {BULLET} {r['name']:<20} every {interval_str}")
     if global_sound_file:
         print(f"  Sound: {global_sound_file}")
-    print(f"Log: {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}")
+    _log_path = (
+        log.handlers[0].baseFilename
+        if log.handlers and hasattr(log.handlers[0], "baseFilename")
+        else str(KIM_DIR / "kim.log")
+    )
+    print(f"Log: {_log_path}")
 
     log.info("kim v%s started %s PID %s", VERSION, EM_DASH, os.getpid())
 
@@ -272,9 +277,12 @@ def cmd_status(args):
         print(f"{CIRCLE_OPEN} kim stopped")
 
     print(f"\n  Config : {CONFIG}")
-    print(
-        f"  Log    : {log.handlers[0].baseFilename if log.handlers else '~/.kim/kim.log'}"
+    _log_path = (
+        log.handlers[0].baseFilename
+        if log.handlers and hasattr(log.handlers[0], "baseFilename")
+        else str(KIM_DIR / "kim.log")
     )
+    print(f"  Log    : {_log_path}")
 
     sound_enabled = config.get("sound", True)
     sound_file = config.get("sound_file") or None

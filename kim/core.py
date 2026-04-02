@@ -20,7 +20,7 @@ try:
 except OSError:
     pass
 
-VERSION = "3.0.0"
+VERSION = "3.1.5"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 try:
@@ -93,9 +93,11 @@ def load_config() -> dict:
     """Load config from disk, creating default if missing."""
     if not CONFIG.exists():
         try:
-            CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
+            _tmp = CONFIG.with_suffix(".tmp")
+            _tmp.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
             if platform.system() != "Windows":
-                os.chmod(CONFIG, 0o600)
+                os.chmod(_tmp, 0o600)
+            _tmp.replace(CONFIG)
             log.info("Created default config: %s", CONFIG)
         except OSError as e:
             log.warning("Could not create config file: %s", e)

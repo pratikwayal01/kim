@@ -93,7 +93,7 @@ def cmd_validate(args):
                 sys.exit(1)
             if isinstance(interval_val, str):
                 pass
-            elif not isinstance(interval_val, (int, float)) or interval_val < 0:
+            elif not isinstance(interval_val, (int, float)) or interval_val <= 0:
                 print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
                 sys.exit(1)
 
@@ -263,6 +263,9 @@ def cmd_import(args):
     except json.JSONDecodeError as e:
         print(f"Invalid JSON: {e}")
         sys.exit(1)
-    except Exception as e:
-        print(f"Import failed: {e}")
+    except OSError as e:
+        print(f"Import failed (I/O error): {e}")
+        sys.exit(1)
+    except (KeyError, TypeError, ValueError) as e:
+        print(f"Import failed (malformed data): {e}")
         sys.exit(1)
