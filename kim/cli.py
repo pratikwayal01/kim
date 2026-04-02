@@ -8,9 +8,6 @@ import sys
 
 from .core import VERSION
 from .interactive import _enable_windows_ansi, cmd_interactive
-
-# Platform-specific alarm symbol for help text
-ALARM = "⏰" if platform.system() != "Windows" else "Reminder"
 from .commands.daemon import cmd_start, cmd_stop, cmd_status
 from .commands.management import (
     cmd_add,
@@ -73,10 +70,7 @@ config: ~/.kim/config.json
 logs:   ~/.kim/kim.log
         """,
     )
-    parser.add_argument(
-        "-v", "-V", "--version", "--VERSION", action="version", version=f"kim {VERSION}"
-    )
-    parser.add_argument("--HELP", action="help", help="show this help message and exit")
+    parser.add_argument("-v", "--version", action="version", version=f"kim {VERSION}")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("start", help="Start the daemon")
@@ -124,7 +118,9 @@ logs:   ~/.kim/kim.log
 
     update_p = sub.add_parser("update", help="Update a reminder")
     update_p.add_argument("name", help="Reminder name")
-    update_p.add_argument("-i", "--interval", type=int, help="New interval in minutes")
+    update_p.add_argument(
+        "-I", "--interval", type=str, help="New interval (e.g., 30m, 1h, 1d)"
+    )
     update_p.add_argument("-t", "--title", help="New notification title")
     update_p.add_argument("-m", "--message", help="New notification message")
     update_p.add_argument(
@@ -142,12 +138,12 @@ logs:   ~/.kim/kim.log
         "time", nargs="+", help="When to fire, e.g: 'in 10m', '1h', '2h 30m', '90s'"
     )
     remind_p.add_argument(
-        "-t", "--title", help=f"Notification title (default: {ALARM} Reminder)"
+        "-t", "--title", help="Notification title (default: \u23f0 Reminder)"
     )
 
     fire_p = sub.add_parser("_remind-fire")
     fire_p.add_argument("--message", required=True)
-    fire_p.add_argument("--title", default=f"{ALARM} Reminder")
+    fire_p.add_argument("--title", default="\u23f0 Reminder")
     fire_p.add_argument("--seconds", type=float, required=True)
 
     sub.add_parser("interactive", help="Enter interactive mode").add_argument(
@@ -289,3 +285,4 @@ logs:   ~/.kim/kim.log
         cmds[args.command](args)
     else:
         parser.print_help()
+        sys.exit(1)
