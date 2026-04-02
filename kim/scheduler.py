@@ -1,6 +1,5 @@
 """
-kim_scheduler.py
-================================================================================
+Heapq-based single-thread scheduler for kim.
 """
 
 import heapq
@@ -116,21 +115,28 @@ class KimScheduler:
           - "30m"        → 30 minutes
           - "2h"         → 2 hours
           - "1d"         → 1 day
-        Returns None if the value is invalid.
+        Returns None if the value is invalid, zero, or negative.
         """
-        # Support both 'interval' and 'interval_minutes' (legacy)
         raw = reminder.get("interval") or reminder.get("interval_minutes", 0)
         try:
             if isinstance(raw, (int, float)):
+                if raw <= 0:
+                    return None
                 return float(raw) * 60
             raw = str(raw).strip().lower()
+            if not raw:
+                return None
             if raw.endswith("d"):
-                return float(raw[:-1]) * 86400
+                val = float(raw[:-1])
+                return val * 86400 if val > 0 else None
             if raw.endswith("h"):
-                return float(raw[:-1]) * 3600
+                val = float(raw[:-1])
+                return val * 3600 if val > 0 else None
             if raw.endswith("m"):
-                return float(raw[:-1]) * 60
-            return float(raw) * 60
+                val = float(raw[:-1])
+                return val * 60 if val > 0 else None
+            val = float(raw)
+            return val * 60 if val > 0 else None
         except (ValueError, TypeError):
             return None
 
@@ -353,9 +359,8 @@ class KimScheduler:
             interval = self._parse_interval(event.reminder)
             if interval:
                 next_event = _Event(
-                    fire_at=event.fire_at
-                    + interval,  # drift-free: add to last fire time
-                    reminder=event.reminder,
+                    fire_at=event.fire_at + interval,
+                    reminder=deepcopy(event.reminder),
                 )
                 with self._lock:
                     name = event.reminder["name"]

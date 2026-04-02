@@ -142,7 +142,11 @@ def notify(
             _notify_slack_webhook(title, message, slack_config["webhook_url"])
         elif slack_config.get("bot_token") and slack_config.get("channel"):
             _notify_slack_bot(
-                title, message, slack_config["bot_token"], slack_config["channel"]
+                title,
+                message,
+                slack_config["bot_token"],
+                slack_config["channel"],
+                urgency,
             )
 
 

@@ -14,8 +14,11 @@ KIM_DIR = Path.home() / ".kim"
 CONFIG = KIM_DIR / "config.json"
 LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
-ONESHOT_FILE = KIM_DIR / "oneshots.json"  # persisted one-shot reminders
-KIM_DIR.mkdir(exist_ok=True)
+ONESHOT_FILE = KIM_DIR / "oneshots.json"
+try:
+    KIM_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
 
 VERSION = "3.0.0"
 
