@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-from ..core import CONFIG, ONESHOT_FILE, VERSION, load_config, log
+from ..core import CONFIG, KIM_DIR, LOG_FILE, ONESHOT_FILE, VERSION, load_config, log
 from ..notifications import notify
 from ..sound import SOUND_FORMAT_NOTES, play_sound_file, validate_sound_file
 from ..utils import CHECK, CROSS, EM_DASH, ALARM, PLAY, BELL
@@ -88,8 +88,19 @@ def cmd_remind(args):
         log.warning("Could not save one-shot reminder: %s", e)
 
     if platform.system() == "Windows":
+        # Resolve the real Python interpreter, bypassing Windows Store stubs.
+        # Store stubs live under WindowsApps and silently fail when spawned
+        # without a console via CREATE_NO_WINDOW.
+        import shutil
+
+        real_python = shutil.which("python") or sys.executable
+        # Prefer pythonw.exe (no-console variant shipped alongside python.exe)
+        # so we don't need CREATE_NO_WINDOW at all.
+        pythonw = Path(real_python).parent / "pythonw.exe"
+        interpreter = str(pythonw) if pythonw.exists() else real_python
+
         cmd = [
-            sys.executable,
+            interpreter,
             "-m",
             "kim",
             "_remind-fire",
@@ -100,18 +111,27 @@ def cmd_remind(args):
             "--seconds",
             str(sleep_seconds),
         ]
+        # Redirect stderr to kim.log so failures are diagnosable.
+        try:
+            log_fd = open(LOG_FILE, "a", encoding="utf-8")
+        except OSError:
+            log_fd = subprocess.DEVNULL
         try:
             subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=log_fd,
                 stdin=subprocess.DEVNULL,
-                creationflags=0x08000000,
+                # DETACHED_PROCESS (0x8) + CREATE_NO_WINDOW (0x8000000)
+                creationflags=0x00000008 | 0x08000000,
             )
         except FileNotFoundError:
             log.error("python not found for one-shot reminder")
             print("Error: could not spawn background process.")
             sys.exit(1)
+        finally:
+            if log_fd is not subprocess.DEVNULL:
+                log_fd.close()
         return
 
     pid = os.fork()

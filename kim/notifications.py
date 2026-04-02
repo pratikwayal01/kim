@@ -93,35 +93,88 @@ def _notify_mac(title, message, urgency, sound, sound_file=None):
 
 
 def _notify_windows(title, message, urgency, sound, sound_file=None):
-    # Try balloon notification
+    # Try WinRT Toast notification (Windows 10/11 native — lands in Action Center)
+    _toast_ok = False
     try:
+        # Escape single-quotes for PowerShell string literals
         t = title.replace("'", "''").replace("\n", " ")
         m = message.replace("'", "''").replace("\n", " ")
-        # Use CREATE_NEW_CONSOLE so notification process has proper window handle
-        ps = f'''
+        # Use PowerShell app ID so Windows associates toasts with a known executable
+        app_id = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe"
+        ps = f"""
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+$template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
+$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template)
+$nodes = $xml.GetElementsByTagName('text')
+$nodes.Item(0).AppendChild($xml.CreateTextNode('{t}')) | Out-Null
+$nodes.Item(1).AppendChild($xml.CreateTextNode('{m}')) | Out-Null
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{app_id}')
+$notifier.Show($toast)
+"""
+        result = subprocess.run(
+            ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            _toast_ok = True
+            log.debug("Windows WinRT toast sent: %s", title)
+        else:
+            err = result.stderr.decode(errors="replace").strip()
+            log.warning("WinRT toast failed (rc=%d): %s", result.returncode, err)
+    except FileNotFoundError:
+        log.error("powershell not found. Is this Windows?")
+    except subprocess.TimeoutExpired:
+        log.warning("WinRT toast timed out")
+    except Exception as e:
+        log.warning("WinRT toast exception: %s", e)
+
+    # Fallback: NotifyIcon balloon (Windows 7/8 / older environments)
+    if not _toast_ok:
+        try:
+            t2 = title.replace("'", "''").replace("\n", " ")
+            m2 = message.replace("'", "''").replace("\n", " ")
+            ps2 = f"""
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $n = New-Object System.Windows.Forms.NotifyIcon
 $n.Icon = [System.Drawing.SystemIcons]::Information
 $n.Visible = $true
-$n.BalloonTipIcon = "Info"
-$n.BalloonTipTitle = "{t}"
-$n.BalloonTipText = "{m}"
+$n.BalloonTipIcon = 'Info'
+$n.BalloonTipTitle = '{t2}'
+$n.BalloonTipText = '{m2}'
 $n.ShowBalloonTip(5000)
 Start-Sleep -Seconds 6
 $n.Visible = $false
 $n.Dispose()
-'''
-        subprocess.Popen(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", ps],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        log.debug("Windows notification sent: %s", title)
-    except FileNotFoundError:
-        log.error("powershell not found. Is this Windows?")
-    except Exception as e:
-        log.warning("Balloon notification failed: %s", e)
+"""
+            subprocess.Popen(
+                ["powershell", "-WindowStyle", "Hidden", "-Command", ps2],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            log.debug("Windows balloon fallback sent: %s", title)
+        except Exception as e:
+            log.warning("Balloon notification fallback failed: %s", e)
+
+    # For critical urgency, also show a console pop-up via msg.exe so the
+    # reminder is visible even when Focus Assist / Do Not Disturb suppresses
+    # toast banners.
+    if urgency == "critical":
+        try:
+            popup_text = f"{title}\n\n{message}"
+            subprocess.Popen(
+                ["msg", "*", "/TIME:30", popup_text],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            pass  # msg.exe not available (e.g. Windows Home without it)
+        except Exception as e:
+            log.debug("msg.exe popup failed: %s", e)
 
     # Play a beep as fallback/confirmation — only when sound is enabled
     if sound:
