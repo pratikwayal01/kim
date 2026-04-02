@@ -135,7 +135,6 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 - **Pure Python stdlib** — no pip installs
 - **Zero config** — works out of the box, creates default config on first run
 - All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
-- Config changes are detected automatically — no need to restart manually
 - Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
 
 ---
