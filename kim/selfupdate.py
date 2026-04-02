@@ -132,6 +132,11 @@ def cmd_selfupdate(args):
                     if resp.status != 200:
                         print(f"Download failed: HTTP {resp.status}")
                         return
+                    # Check Content-Type to reject HTML/error pages
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/html" in content_type:
+                        print("Download failed: received HTML instead of binary.")
+                        return
                     with open(tmp_path, "wb") as fout:
                         while True:
                             chunk = resp.read(65536)

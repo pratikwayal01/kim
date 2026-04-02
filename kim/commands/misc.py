@@ -357,86 +357,90 @@ def cmd_sound(args):
 
 
 # ── Shell completion strings ──────────────────────────────────────────────────
-BASH_COMPLETION = """_kim_completions() {
-    local cur prev opts
-    COMPREPLY=()
+BASH_COMPLETION = r"""_kim_completions() {
+    local cur prev words cword
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
+    cword=$COMP_CWORD
+    COMPREPLY=()
 
-    case "${prev}" in
-        kim)
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-        remove|enable|disable|update)
+    local cmds="start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
+
+    # Word 1: complete subcommands
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
+        return
+    fi
+
+    local cmd="${COMP_WORDS[1]}"
+
+    case "$cmd" in
+        remove|enable|disable)
             local config="$HOME/.kim/config.json"
             if [[ -f "$config" ]]; then
-                local names=$(python3 -c "import json; print(' '.join([r['name'] for r in json.load(open('$config')).get('reminders', [])]))" 2>/dev/null)
-                COMPREPLY=( $(compgen -W "${names}" -- ${cur}) )
+                local names
+                names=$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null)
+                COMPREPLY=( $(compgen -W "$names" -- "$cur") )
             fi
-            return 0
-            ;;
-        add)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- ${cur}) ) ;;
-            esac
-            return 0
             ;;
         update)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--interval --title --message --urgency --enable --disable --sound-file --slack-channel --slack-webhook -I -t -m -u" -- ${cur}) ) ;;
-            esac
-            return 0
+            if [[ $cword -eq 2 ]]; then
+                local config="$HOME/.kim/config.json"
+                if [[ -f "$config" ]]; then
+                    local names
+                    names=$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null)
+                    COMPREPLY=( $(compgen -W "$names" -- "$cur") )
+                fi
+            elif [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--interval --title --message --urgency --enable --disable --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
+            fi
+            ;;
+        add)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
+            fi
             ;;
         remind)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--title -t" -- ${cur}) ) ;;
-            esac
-            return 0
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--title -t" -- "$cur") )
+            fi
             ;;
         sound)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- ${cur}) ) ;;
-            esac
-            return 0
-            ;;
-        export)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--format --output -f -o" -- ${cur}) ) ;;
-            esac
-            return 0
-            ;;
-        import)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--format --merge -f" -- ${cur}) ) ;;
-            esac
-            return 0
-            ;;
-        logs)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--lines -n" -- ${cur}) ) ;;
-            esac
-            return 0
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
+            fi
             ;;
         slack)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--test --title --message -t -m" -- ${cur}) ) ;;
-            esac
-            return 0
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--test --title --message -t -m" -- "$cur") )
+            fi
+            ;;
+        export)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--format --output -f -o" -- "$cur") )
+            fi
+            ;;
+        import)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--format --merge -f" -- "$cur") )
+            fi
+            ;;
+        logs)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--lines -n" -- "$cur") )
+            fi
             ;;
         self-update)
-            case "${cur}" in
-                -*) COMPREPLY=( $(compgen -W "--force -f" -- ${cur}) ) ;;
-            esac
-            return 0
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--force -f" -- "$cur") )
+            fi
             ;;
     esac
 }
 complete -F _kim_completions kim
 """
 
-ZSH_COMPLETION = """#compdef kim
+ZSH_COMPLETION = r"""#compdef kim
 _kim() {
     local -a commands
     commands=(
@@ -445,7 +449,7 @@ _kim() {
         "status:Show status and active reminders"
         "list:List all reminders from config"
         "logs:Show recent log entries"
-        "edit:Open config in \\$EDITOR"
+        "edit:Open config in \$EDITOR"
         "add:Add a new reminder"
         "remove:Remove a reminder"
         "enable:Enable a reminder"
@@ -464,8 +468,8 @@ _kim() {
         "_remind-fire:Internal one-shot fire command"
     )
 
-    _arguments -C \\
-        "1: :->cmds" \\
+    _arguments -C \
+        "1: :->cmds" \
         "*::arg:->args"
 
     case $state in
@@ -475,58 +479,57 @@ _kim() {
         args)
             case $line[1] in
                 add)
-                    _arguments \\
-                        "(-I --interval)"{-I,--interval}"[Interval (e.g., 30m, 1h, 1d)]" \\
-                        "(-t --title)"{-t,--title}"[Notification title]" \\
-                        "(-m --message)"{-m,--message}"[Notification message]" \\
-                        "(-u --urgency)"{-u,--urgency}"[Urgency level]:urgency:(low normal critical)" \\
-                        "--sound-file[Per-reminder sound file]:file:_files" \\
-                        "--slack-channel[Per-reminder Slack channel]" \\
+                    _arguments \
+                        "(-I --interval)"{-I,--interval}"[Interval (e.g., 30m, 1h, 1d)]" \
+                        "(-t --title)"{-t,--title}"[Notification title]" \
+                        "(-m --message)"{-m,--message}"[Notification message]" \
+                        "(-u --urgency)"{-u,--urgency}"[Urgency level]:urgency:(low normal critical)" \
+                        "--sound-file[Per-reminder sound file]:file:_files" \
+                        "--slack-channel[Per-reminder Slack channel]" \
                         "--slack-webhook[Per-reminder Slack webhook URL]"
                     ;;
                 update)
-                    _arguments \\
-                        "(-I --interval)"{-I,--interval}"[New interval]" \\
-                        "(-t --title)"{-t,--title}"[New title]" \\
-                        "(-m --message)"{-m,--message}"[New message]" \\
-                        "(-u --urgency)"{-u,--urgency}"[New urgency]:urgency:(low normal critical)" \\
-                        "--enable[Enable reminder]" \\
-                        "--disable[Disable reminder]" \\
-                        "--sound-file[Per-reminder sound file]:file:_files" \\
-                        "--slack-channel[Per-reminder Slack channel]" \\
+                    _arguments \
+                        "1:reminder name:->reminders" \
+                        "(-I --interval)"{-I,--interval}"[New interval]" \
+                        "(-t --title)"{-t,--title}"[New title]" \
+                        "(-m --message)"{-m,--message}"[New message]" \
+                        "(-u --urgency)"{-u,--urgency}"[New urgency]:urgency:(low normal critical)" \
+                        "--enable[Enable reminder]" \
+                        "--disable[Disable reminder]" \
+                        "--sound-file[Per-reminder sound file]:file:_files" \
+                        "--slack-channel[Per-reminder Slack channel]" \
                         "--slack-webhook[Per-reminder Slack webhook URL]"
                     ;;
                 remove|enable|disable)
-                    local -a names
-                    names=(${$(python3 -c "import json; [print(r['name']) for r in json.load(open('$HOME/.kim/config.json')).get('reminders', [])]" 2>/dev/null)})
-                    _arguments "1:reminder name:($names)"
+                    _arguments "1:reminder name:->reminders"
                     ;;
                 remind)
                     _arguments "(-t --title)"{-t,--title}"[Notification title]"
                     ;;
                 sound)
-                    _arguments \\
-                        "--set[Set custom sound file]:file:_files" \\
-                        "--clear[Revert to system default]" \\
-                        "--test[Play current sound]" \\
-                        "--enable[Enable sound]" \\
+                    _arguments \
+                        "--set[Set custom sound file]:file:_files" \
+                        "--clear[Revert to system default]" \
+                        "--test[Play current sound]" \
+                        "--enable[Enable sound]" \
                         "--disable[Disable sound]"
                     ;;
                 slack)
-                    _arguments \\
-                        "--test[Send test notification]" \\
-                        "(-t --title)"{-t,--title}"[Test title]" \\
+                    _arguments \
+                        "--test[Send test notification]" \
+                        "(-t --title)"{-t,--title}"[Test title]" \
                         "(-m --message)"{-m,--message}"[Test message]"
                     ;;
                 export)
-                    _arguments \\
-                        "(-f --format)"{-f,--format}"[Format]:format:(json csv)" \\
+                    _arguments \
+                        "(-f --format)"{-f,--format}"[Format]:format:(json csv)" \
                         "(-o --output)"{-o,--output}"[Output file]:file:_files"
                     ;;
                 import)
-                    _arguments \\
-                        "(-f --format)"{-f,--format}"[Format]:format:(json csv auto)" \\
-                        "--merge[Merge with existing]" \\
+                    _arguments \
+                        "(-f --format)"{-f,--format}"[Format]:format:(json csv auto)" \
+                        "--merge[Merge with existing]" \
                         "1:file:_files"
                     ;;
                 logs)
@@ -537,13 +540,22 @@ _kim() {
                     ;;
             esac
             ;;
+        reminders)
+            local config="$HOME/.kim/config.json"
+            if [[ -f "$config" ]]; then
+                local -a names
+                names=(${(f)"$(python3 -c "import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders', [])]" "$config" 2>/dev/null)"})
+                _describe "reminder" names
+            fi
+            ;;
     esac
 }
 _kim
 """
 
-FISH_COMPLETION = """complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
-complete -c kim -n "__fish_seen_subcommand_from remove enable disable update" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\\n') for r in json.load(open('$HOME/.kim/config.json')).get('reminders',[])]\" 2>/dev/null)"
+FISH_COMPLETION = r"""complete -c kim -f -a "start stop status list logs edit add remove enable disable update interactive self-update uninstall export import validate slack sound completion remind _remind-fire"
+complete -c kim -n "__fish_seen_subcommand_from remove enable disable" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
+complete -c kim -n "__fish_seen_subcommand_from update; and not __fish_seen_subcommand_from update -a" -f -a "(python3 -c \"import json,sys; [sys.stdout.write(r['name']+'\n') for r in json.load(open(sys.argv[1])).get('reminders',[])]\" $HOME/.kim/config.json 2>/dev/null)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l interval -s I -d "Interval (e.g., 30m, 1h, 1d)"
 complete -c kim -n "__fish_seen_subcommand_from add" -l title -s t -d "Notification title"
 complete -c kim -n "__fish_seen_subcommand_from add" -l message -s m -d "Notification message"
