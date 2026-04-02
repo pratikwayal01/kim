@@ -22,12 +22,17 @@
 
 ### Install
 
-**Linux / macOS**
+**pip** (all platforms) — [![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
+```bash
+pip install kim-reminder
+```
+
+**Linux / macOS** (binary + autostart)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
 ```
 
-**Windows** (PowerShell as Admin)
+**Windows** (PowerShell as Admin, binary + autostart)
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
 ```
@@ -59,6 +64,7 @@ kim remind "standup call" in 10m
 ## Links
 
 - [GitHub Repository](https://github.com/pratikwayal01/kim)
+- [PyPI Package](https://pypi.org/project/kim-reminder/)
 - [Issue Tracker](https://github.com/pratikwayal01/kim/issues)
 - [Wiki](https://github.com/pratikwayal01/kim/wiki)
 

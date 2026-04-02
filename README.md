@@ -9,12 +9,18 @@
 
 ## Install
 
-**Linux / macOS**
+**pip** (all platforms)
+```bash
+pip install kim-reminder
+```
+[![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
+
+**Linux / macOS** (binary, autostart setup)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
 ```
 
-**Windows** (PowerShell as Admin)
+**Windows** (PowerShell as Admin, binary, autostart setup)
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
 ```

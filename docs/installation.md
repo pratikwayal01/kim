@@ -1,6 +1,19 @@
 # Installation
 
-## Automatic Installation
+## pip (Recommended — all platforms)
+
+[![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
+
+```bash
+pip install kim-reminder
+```
+
+Then run `kim start` to launch the daemon. That's all.
+
+> pip installs the `kim` command globally. Autostart (systemd / launchd / Task Scheduler)
+> is set up the first time you run `kim start`.
+
+## Automatic Installation (binary + autostart)
 
 ### Linux / macOS
 
@@ -73,6 +86,12 @@ kim status     # Show status
 
 ```bash
 kim self-update
+```
+
+### Via pip
+
+```bash
+pip install --upgrade kim-reminder
 ```
 
 ### Manual
