@@ -550,7 +550,7 @@ def cmd_interactive(args):
         print(f"\n{CHECK} Removed reminder '{r['name']}'")
         time.sleep(1)
 
-    def remove_oneshot():
+    def cancel_oneshot():
         clear_screen()
         print("\033[1;32m=== Cancel One-shot Reminder ===\033[0m\n")
         now = time.time()
@@ -614,7 +614,7 @@ def cmd_interactive(args):
         4: edit_reminder,
         5: toggle_reminder,
         6: remove_reminder,
-        7: remove_oneshot,
+        7: cancel_oneshot,
         8: start_kim,
         9: stop_kim,
     }

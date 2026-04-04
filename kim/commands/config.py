@@ -68,17 +68,20 @@ def cmd_edit(args):
 def cmd_list(args):
     config = load_config()
     reminders = config.get("reminders", [])
-    print(f"{'NAME':<20} {'INTERVAL':>12}   {'URGENCY':<10} {'ENABLED'}")
-    print(HLINE * 58)
+    print(f"{'NAME':<20} {'SCHEDULE':>14}   {'URGENCY':<10} {'ENABLED'}")
+    print(HLINE * 60)
     for r in reminders:
         enabled = CHECK if r.get("enabled", True) else MIDDOT
-        interval = r.get("interval") or r.get("interval_minutes", 30)
-        if isinstance(interval, str):
-            interval_str = interval
+        if r.get("at"):
+            interval_str = f"at {r['at']}"
         else:
-            interval_str = f"{interval} min"
+            interval = r.get("interval") or r.get("interval_minutes", 30)
+            if isinstance(interval, str):
+                interval_str = interval
+            else:
+                interval_str = f"{interval} min"
         print(
-            f"{r['name']:<20} {interval_str:>12}   {r.get('urgency', 'normal'):<10} {enabled}"
+            f"{r['name']:<20} {interval_str:>14}   {r.get('urgency', 'normal'):<10} {enabled}"
         )
 
     if getattr(args, "oneshots", False):

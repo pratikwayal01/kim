@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.8] - 2026-04-05
+
+### Fixed
+- **`_find_asset` was orphaned dead code in `selfupdate.py`** — the function body appeared after `_parse_version`'s `return` statement making it unreachable, causing `NameError` at runtime during `self-update`. Extracted into a proper top-level function.
+- **`cmd_list` did not display `at`-schedule reminders correctly** — the `INTERVAL` column fell back to `"30 min"` for daily-at reminders. Now shows `"at HH:MM"` and the column is renamed `SCHEDULE`.
+- **Interactive mode: `cancel_oneshot` name-shadowing crash** — the local helper inside `cmd_interactive` was named `remove_oneshot`, shadowing the module-level import of the same name, causing a `TypeError` when cancelling a one-shot. Renamed to `cancel_oneshot`.
+
+### Tests
+- Added 77 new feature tests in `tests/test_features.py` covering: `cmd_remind`, oneshot load/remove, `cmd_list`, `cmd_status`, config reload, sanitize, export/import, `_find_asset`, scheduler reschedule, parse_interval/parse_datetime edge cases, and `cmd_validate`.
+- Added regression tests in `tests/test_regression.py` for `_parse_version`, downgrade guard, install-type detection order, interactive `cancel_oneshot` rename, and `cmd_validate` at-reminder acceptance.
+
 ## [4.1.7] - 2026-04-05
 
 ### Added

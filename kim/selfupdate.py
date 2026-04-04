@@ -124,6 +124,8 @@ def _parse_version(v: str) -> tuple:
             parts.append(0)
     return tuple(parts)
 
+
+def _find_asset(assets: list, name: str):
     """Return browser_download_url for the asset whose name contains `name`."""
     for a in assets:
         if name in a.get("name", ""):

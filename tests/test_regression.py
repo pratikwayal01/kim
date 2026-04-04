@@ -673,9 +673,11 @@ class TestInteractiveAddReminderInterval(unittest.TestCase):
             src,
             "new_reminder must use interval_str, not the old f'{interval}m'",
         )
+        # The actual assignment is new_reminder["interval"] = interval_str
         self.assertIn(
-            '"interval": interval_str',
+            '"interval"] = interval_str',
             src,
+            'new_reminder must assign interval_str to the "interval" key',
         )
 
     def test_add_interval_logic(self):
@@ -1441,6 +1443,255 @@ class TestSchedulerLoadsAtTimeReminder(unittest.TestCase):
         # Rescheduled fire time must be in the future
         new_event = sched._live["soon"]
         self.assertGreater(new_event.fire_at, time.time())
+
+
+# ---------------------------------------------------------------------------
+# v4.1.8 — selfupdate: version comparison and install-type detection order
+# ---------------------------------------------------------------------------
+class TestParseVersion(unittest.TestCase):
+    """_parse_version converts a semver string to a comparable tuple."""
+
+    def _pv(self, s):
+        from kim.selfupdate import _parse_version
+
+        return _parse_version(s)
+
+    def test_equal_versions(self):
+        self.assertEqual(self._pv("4.1.7"), self._pv("4.1.7"))
+
+    def test_upgrade_detected(self):
+        self.assertLess(self._pv("4.1.7"), self._pv("4.1.8"))
+
+    def test_downgrade_detected(self):
+        self.assertGreater(self._pv("4.1.8"), self._pv("4.1.7"))
+
+    def test_major_version_dominates(self):
+        self.assertLess(self._pv("3.9.9"), self._pv("4.0.0"))
+
+    def test_v_prefix_stripped(self):
+        self.assertEqual(self._pv("v4.1.8"), self._pv("4.1.8"))
+
+    def test_two_part_version(self):
+        self.assertLess(self._pv("4.1"), self._pv("4.2"))
+
+    def test_garbage_returns_zero_tuple(self):
+        """Non-numeric version strings must not raise — return (0,) as fallback."""
+        result = self._pv("not-a-version")
+        self.assertIsInstance(result, tuple)
+
+
+class TestSelfUpdateDowngradeGuard(unittest.TestCase):
+    """cmd_selfupdate must not offer to 'update' when installed version > latest."""
+
+    def _fake_fetch(self, tag):
+        from kim import selfupdate
+
+        fake = {"tag_name": tag, "assets": []}
+        return patch.object(selfupdate, "_fetch_latest_release", return_value=fake)
+
+    def test_no_downgrade_when_ahead_of_latest(self):
+        """When installed version > latest GitHub release, print already-up-to-date."""
+        from kim import selfupdate
+
+        # Patch VERSION to a high value so we're always "ahead"
+        with patch.object(selfupdate, "VERSION", "99.0.0"):
+            with self._fake_fetch("v1.0.0"):
+                with patch("builtins.print") as mock_print:
+                    selfupdate.cmd_selfupdate(MagicMock(force=False))
+                    printed = " ".join(str(c) for c in mock_print.call_args_list)
+                    # Must NOT call pip/binary/script updaters — just print message
+                    self.assertNotIn("Updating", printed)
+
+    def test_upgrade_proceeds_when_behind_latest(self):
+        """When latest > installed, must proceed with update (calls install type)."""
+        from kim import selfupdate
+
+        with patch.object(selfupdate, "VERSION", "1.0.0"):
+            with self._fake_fetch("v99.0.0"):
+                with patch.object(
+                    selfupdate, "_detect_install_type", return_value="pip"
+                ):
+                    with patch.object(selfupdate, "_update_via_pip") as mock_pip:
+                        # Use force=True to skip the interactive input() prompt
+                        selfupdate.cmd_selfupdate(MagicMock(force=True))
+                        mock_pip.assert_called_once()
+
+
+class TestInstallTypeOrderPipFirst(unittest.TestCase):
+    """_detect_install_type must check pip before script, so leftover ~/.kim/kim.py
+    does not fool it into returning 'script' when pip-installed."""
+
+    def test_pip_wins_even_when_kimpy_exists(self):
+        """When pip metadata exists AND ~/.kim/kim.py exists, return 'pip'."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_kim_dir = Path(tmpdir)
+            (fake_kim_dir / "kim.py").write_text("# leftover", encoding="utf-8")
+
+            fake_dist = MagicMock()
+            with patch.object(
+                importlib.metadata, "distribution", return_value=fake_dist
+            ):
+                with patch.object(selfupdate, "KIM_DIR", fake_kim_dir):
+                    result = selfupdate._detect_install_type()
+
+        self.assertEqual(result, "pip")
+
+
+# ---------------------------------------------------------------------------
+# v4.1.8 — interactive.py: cancel_oneshot closure must not shadow module-level
+#           remove_oneshot, and action_map must point to the renamed function
+# ---------------------------------------------------------------------------
+class TestInteractiveCancelOneshotNoShadow(unittest.TestCase):
+    """The local cancel_oneshot() in cmd_interactive must not shadow the
+    module-level remove_oneshot import, and the action_map must reference
+    cancel_oneshot (not the old remove_oneshot name)."""
+
+    def test_local_function_renamed_to_cancel_oneshot(self):
+        """interactive.py source must define a local 'def cancel_oneshot' closure."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        self.assertIn(
+            "def cancel_oneshot",
+            src,
+            "The local one-shot removal closure must be named cancel_oneshot",
+        )
+
+    def test_action_map_uses_cancel_oneshot(self):
+        """action_map must reference cancel_oneshot, not remove_oneshot."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        # Find the action_map dict definition and confirm cancel_oneshot is in it
+        self.assertIn(
+            "cancel_oneshot",
+            src,
+            "action_map must reference cancel_oneshot",
+        )
+
+    def test_action_map_does_not_reference_remove_oneshot_as_value(self):
+        """action_map must NOT use remove_oneshot as a value (would be a NameError
+        at runtime since only cancel_oneshot is defined locally)."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        # Extract just the action_map block to check
+        # We check that '7: remove_oneshot' does NOT appear
+        import re
+
+        # Match the pattern where remove_oneshot is used as a dict value after the colon
+        bad_pattern = re.compile(r"\d+\s*:\s*remove_oneshot\b")
+        matches = bad_pattern.findall(src)
+        self.assertEqual(
+            matches,
+            [],
+            f"action_map must not reference remove_oneshot as a callable value: {matches}",
+        )
+
+    def test_module_level_remove_oneshot_still_imported(self):
+        """The module-level remove_oneshot must still be importable from interactive."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive)
+        self.assertIn(
+            "from .commands.misc import",
+            src,
+            "interactive.py must still import remove_oneshot from commands.misc",
+        )
+        self.assertIn(
+            "remove_oneshot",
+            src,
+        )
+
+    def test_cancel_oneshot_calls_module_remove_oneshot(self):
+        """Inside cancel_oneshot, the call must be remove_oneshot(fire_at) — using
+        the module-level function, not a recursive self-call."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        # The closure body should contain remove_oneshot(target[...])
+        self.assertIn(
+            "remove_oneshot(target",
+            src,
+            "cancel_oneshot must call module-level remove_oneshot(target[...])",
+        )
+
+
+# ---------------------------------------------------------------------------
+# v4.1.8 — cmd_validate accepts reminders with 'at' field (no interval)
+# ---------------------------------------------------------------------------
+class TestCmdValidateAcceptsAtReminders(unittest.TestCase):
+    """cmd_validate must not reject valid reminders that use 'at' instead of interval."""
+
+    def _run_validate(self, reminders):
+        from kim.commands import config as cfg_mod
+
+        cfg = {"reminders": reminders}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = Path(tmpdir) / "config.json"
+            cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+            with patch.object(cfg_mod, "CONFIG", cfg_file):
+                with patch("builtins.print"):
+                    try:
+                        cfg_mod.cmd_validate(MagicMock())
+                        return True  # passed
+                    except SystemExit as e:
+                        return e.code  # failed with code
+
+    def test_at_reminder_passes_validation(self):
+        reminders = [
+            {
+                "name": "standup",
+                "at": "09:30",
+                "title": "Stand-up",
+                "message": "Time!",
+                "urgency": "normal",
+                "enabled": True,
+            }
+        ]
+        result = self._run_validate(reminders)
+        self.assertEqual(
+            result, True, f"cmd_validate must accept 'at' reminders, got exit {result}"
+        )
+
+    def test_interval_reminder_still_passes(self):
+        reminders = [
+            {
+                "name": "water",
+                "interval": "30m",
+                "title": "Water",
+                "message": "Drink!",
+                "urgency": "normal",
+                "enabled": True,
+            }
+        ]
+        result = self._run_validate(reminders)
+        self.assertEqual(result, True)
+
+    def test_reminder_missing_both_interval_and_at_fails(self):
+        reminders = [
+            {
+                "name": "broken",
+                "title": "Broken",
+                "message": "No schedule",
+                "urgency": "normal",
+                "enabled": True,
+            }
+        ]
+        result = self._run_validate(reminders)
+        self.assertEqual(
+            result,
+            1,
+            "Reminder missing both 'at' and 'interval' must exit with code 1",
+        )
 
 
 if __name__ == "__main__":
