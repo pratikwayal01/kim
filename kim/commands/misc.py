@@ -5,7 +5,6 @@ Miscellaneous commands: remind, slack, sound, completion.
 import json
 import os
 import platform
-import re
 import signal
 import subprocess
 import sys

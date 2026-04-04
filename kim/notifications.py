@@ -187,8 +187,8 @@ $n.Dispose()
         except Exception:
             pass
 
-    # Play sound file if specified (or system default if sound=True but no custom file)
-    if sound or sound_file:
+    # Play sound file or system default when sound is enabled
+    if sound:
         play_sound_file(sound_file, "Windows")
 
 

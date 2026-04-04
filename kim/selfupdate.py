@@ -466,8 +466,6 @@ def cmd_selfupdate(args):
 
 
 def cmd_uninstall(args):
-    import subprocess as _sp
-
     print("\033[1;31m=== Uninstall kim ===\033[0m\n")
 
     if PID_FILE.exists():
@@ -492,7 +490,7 @@ def cmd_uninstall(args):
 
     if system == "Linux":
         try:
-            _sp.run(
+            subprocess.run(
                 ["systemctl", "--user", "disable", "--now", "kim.service"],
                 capture_output=True,
             )
@@ -506,14 +504,14 @@ def cmd_uninstall(args):
         plist = Path.home() / "Library/LaunchAgents/io.kim.reminder.plist"
         if plist.exists():
             try:
-                _sp.run(["launchctl", "unload", str(plist)], capture_output=True)
+                subprocess.run(["launchctl", "unload", str(plist)], capture_output=True)
             except FileNotFoundError:
                 pass
             plist.unlink()
             print("Removed launchd plist.")
     elif system == "Windows":
         try:
-            result = _sp.run(
+            result = subprocess.run(
                 [
                     "powershell",
                     "-NoProfile",
@@ -593,7 +591,7 @@ def cmd_uninstall(args):
     # this process has already exited so there is no file-in-use conflict.
     if deferred_bat and deferred_bat.exists():
         try:
-            _sp.Popen(
+            subprocess.Popen(
                 [
                     "cmd",
                     "/c",
@@ -601,9 +599,9 @@ def cmd_uninstall(args):
                 ],
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
                 close_fds=True,
-                stdin=_sp.DEVNULL,
-                stdout=_sp.DEVNULL,
-                stderr=_sp.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 shell=False,
             )
         except Exception:

@@ -2,14 +2,16 @@
 Config-related commands: edit, list, logs, validate, export, import.
 """
 
+import datetime as _dt
 import json
 import os
 import platform
 import subprocess
 import sys
+import time as _time
 from pathlib import Path
 
-from ..core import CONFIG, LOG_FILE, load_config, log
+from ..core import CONFIG, LOG_FILE, ONESHOT_FILE, load_config, log
 from ..utils import CHECK, MIDDOT, HLINE
 
 
@@ -64,9 +66,6 @@ def cmd_edit(args):
 
 
 def cmd_list(args):
-    import time as _time
-    import datetime as _dt
-
     config = load_config()
     reminders = config.get("reminders", [])
     print(f"{'NAME':<20} {'INTERVAL':>12}   {'URGENCY':<10} {'ENABLED'}")
@@ -83,14 +82,10 @@ def cmd_list(args):
         )
 
     if getattr(args, "oneshots", False):
-        from ..core import ONESHOT_FILE
-
         oneshots = []
         if ONESHOT_FILE.exists():
             try:
-                import json as _json
-
-                oneshots = _json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+                oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
             except Exception:
                 oneshots = []
         now = _time.time()
@@ -156,13 +151,18 @@ def cmd_validate(args):
         if "name" not in r:
             print("Error: Reminder missing 'name' field.")
             sys.exit(1)
-        # Accept both 'interval' and 'interval_minutes' (legacy)
-        interval_val = r.get("interval") or r.get("interval_minutes")
-        if interval_val is None:
-            print(f"Error: Reminder '{r.get('name')}' missing 'interval' field.")
+        # Accept 'at' (daily schedule), 'interval', or legacy 'interval_minutes'
+        has_schedule = r.get("at") or r.get("interval") or r.get("interval_minutes")
+        if not has_schedule:
+            print(
+                f"Error: Reminder '{r.get('name')}' missing schedule ('interval' or 'at') field."
+            )
             sys.exit(1)
-        if not isinstance(interval_val, str) and (
-            not isinstance(interval_val, (int, float)) or interval_val <= 0
+        interval_val = r.get("interval") or r.get("interval_minutes")
+        if (
+            interval_val is not None
+            and not isinstance(interval_val, str)
+            and (not isinstance(interval_val, (int, float)) or interval_val <= 0)
         ):
             print(f"Error: Reminder '{r.get('name')}' has invalid interval.")
             sys.exit(1)

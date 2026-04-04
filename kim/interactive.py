@@ -2,10 +2,12 @@
 Interactive mode for kim.
 """
 
+import datetime as _dt
 import json
 import os
 import platform
 import shutil
+import subprocess as _sp
 import sys
 import time
 
@@ -22,11 +24,12 @@ from .core import (
     PID_FILE,
     load_config,
     log,
-    parse_interval,
     parse_datetime,
     parse_at_time,
 )
+from .notifications import notify
 from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT, CIRCLE_OPEN, CIRCLE_FILLED
+from .commands.management import _signal_reload
 from .commands.misc import load_oneshot_reminders, remove_oneshot
 
 
@@ -198,8 +201,6 @@ def cmd_interactive(args):
         input()
 
     def list_oneshots():
-        import datetime as _dt
-
         clear_screen()
         print("\033[1;32m=== Pending One-shot Reminders ===\033[0m\n")
         now = time.time()
@@ -307,8 +308,6 @@ def cmd_interactive(args):
             return
 
         # Signal live reload
-        from .commands.management import _signal_reload
-
         _signal_reload()
 
         print(f"\n{CHECK} Added reminder '{name}' ({schedule_desc})")
@@ -316,8 +315,6 @@ def cmd_interactive(args):
         time.sleep(1)
 
     def add_oneshot():
-        import subprocess as _sp
-
         clear_screen()
         print("\033[1;32m=== Add One-shot Reminder ===\033[0m\n")
         print("Examples: in 30m  |  in 2h  |  at 14:30  |  at tomorrow 9am")
@@ -352,8 +349,6 @@ def cmd_interactive(args):
             return
 
         title = input("Title (optional) [Reminder]: ").strip() or "Reminder"
-
-        import datetime as _dt
 
         fire_dt = _dt.datetime.fromtimestamp(fire_time).strftime("%Y-%m-%d %H:%M")
 
@@ -405,7 +400,6 @@ def cmd_interactive(args):
                 try:
                     os.setsid()
                     time.sleep(sleep_seconds)
-                    from .notifications import notify
 
                     cfg = load_config()
                     notify(
@@ -479,8 +473,6 @@ def cmd_interactive(args):
             time.sleep(2)
             return
 
-        from .commands.management import _signal_reload
-
         _signal_reload()
 
         print(f"\n{CHECK} Updated reminder '{r['name']}'")
@@ -515,8 +507,6 @@ def cmd_interactive(args):
         if not _save_config(config):
             time.sleep(2)
             return
-
-        from .commands.management import _signal_reload
 
         _signal_reload()
 
@@ -555,16 +545,12 @@ def cmd_interactive(args):
             time.sleep(2)
             return
 
-        from .commands.management import _signal_reload
-
         _signal_reload()
 
         print(f"\n{CHECK} Removed reminder '{r['name']}'")
         time.sleep(1)
 
     def remove_oneshot():
-        import datetime as _dt
-
         clear_screen()
         print("\033[1;32m=== Cancel One-shot Reminder ===\033[0m\n")
         now = time.time()

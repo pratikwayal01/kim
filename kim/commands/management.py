@@ -2,14 +2,15 @@
 Reminder management commands: add, remove, enable, disable, update.
 """
 
+import datetime as _dt
 import json
 import os
 import platform
 import sys
+import time as _time
 
 from ..core import (
     CONFIG,
-    KIM_DIR,
     ONESHOT_FILE,
     PID_FILE,
     RELOAD_FILE,
@@ -138,17 +139,12 @@ def cmd_remove(args):
 
 def _remove_oneshot(token: str) -> None:
     """Remove a pending one-shot by 1-based index or message substring."""
-    import time as _time
-    import datetime as _dt
-
     if not ONESHOT_FILE.exists():
         print("No pending one-shot reminders.")
         sys.exit(1)
 
     try:
-        import json as _json
-
-        oneshots = _json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
     except Exception as e:
         print(f"Could not read oneshots file: {e}")
         sys.exit(1)
@@ -187,10 +183,8 @@ def _remove_oneshot(token: str) -> None:
     fire_dt = _dt.datetime.fromtimestamp(removed["fire_at"]).strftime("%Y-%m-%d %H:%M")
 
     try:
-        import json as _json
-
         _tmp = ONESHOT_FILE.with_suffix(".tmp")
-        _tmp.write_text(_json.dumps(oneshots, indent=2), encoding="utf-8")
+        _tmp.write_text(json.dumps(oneshots, indent=2), encoding="utf-8")
         _tmp.replace(ONESHOT_FILE)
     except OSError as e:
         print(f"Error writing oneshots file: {e}")

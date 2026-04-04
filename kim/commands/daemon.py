@@ -8,7 +8,6 @@ import platform
 import signal
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -178,9 +177,16 @@ def cmd_start(args):
 
     print(f"kim v{VERSION} {EM_DASH} {len(active)} reminder(s) active")
     for r in active:
-        interval = r.get("interval") or r.get("interval_minutes", 30)
-        interval_str = f"{interval} min" if isinstance(interval, int) else str(interval)
-        print(f"  {BULLET} {r['name']:<20} every {interval_str}")
+        if r.get("at"):
+            schedule_str = f"daily at {r['at']}"
+        else:
+            interval = r.get("interval") or r.get("interval_minutes", 30)
+            schedule_str = (
+                f"every {interval} min"
+                if isinstance(interval, int)
+                else f"every {interval}"
+            )
+        print(f"  {BULLET} {r['name']:<20} {schedule_str}")
     if global_sound_file:
         print(f"  Sound: {global_sound_file}")
     _log_path = (
@@ -421,8 +427,14 @@ def cmd_status(args):
     if active:
         print("  Active reminders:")
         for r in active:
+            if r.get("at"):
+                schedule = f"daily at {r['at']}"
+            else:
+                schedule = (
+                    f"every {r.get('interval') or r.get('interval_minutes', '30')}"
+                )
             print(
-                f"    {CHECK} {r['name']:<20} every {r.get('interval') or r.get('interval_minutes', '30')}  [{r.get('urgency', 'normal')}]"
+                f"    {CHECK} {r['name']:<20} {schedule}  [{r.get('urgency', 'normal')}]"
             )
     if paused:
         print("  Disabled reminders:")
