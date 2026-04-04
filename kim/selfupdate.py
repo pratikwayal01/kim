@@ -559,46 +559,6 @@ def cmd_uninstall(args):
         except FileNotFoundError:
             print("No scheduled task found (or already removed).")
 
-    # --- Kill orphaned _remind-fire subprocesses --------------------------------
-    # The daemon spawns background python processes for one-shot reminders
-    # (kim remind / kim _remind-fire).  If the daemon was stopped while these
-    # were still sleeping they remain alive, holding kim.log open via their own
-    # RotatingFileHandler import.  We must kill them before we can delete KIM_DIR.
-    if system == "Windows":
-        try:
-            import subprocess as _sp, sys as _sys
-
-            kim_py = str(KIM_DIR / "kim.py")
-            result = _sp.run(
-                [
-                    "wmic",
-                    "process",
-                    "where",
-                    f"CommandLine like '%kim.py%' and CommandLine like '%_remind-fire%'",
-                    "get",
-                    "ProcessId",
-                    "/format:value",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            for line in result.stdout.splitlines():
-                line = line.strip()
-                if line.startswith("ProcessId="):
-                    pid = int(line.split("=", 1)[1])
-                    try:
-                        _sp.run(
-                            ["taskkill", "/F", "/PID", str(pid)],
-                            capture_output=True,
-                            timeout=5,
-                        )
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-    # --------------------------------------------------------------------------
-
     # --- Release all log file handles before touching KIM_DIR ----------------
     # Best-effort: close Python-level handlers so they flush; on Windows the OS
     # file lock on kim.log will not be released until this process exits, so
@@ -715,8 +675,18 @@ def cmd_uninstall(args):
     deferred_files = [p for p in (deferred_bat, deferred_exe) if p and p.exists()]
     if deferred_files or deferred_kimdir:
         # Use PowerShell for the deferred cleanup — cleaner quoting and retry logic.
-        # Start-Sleep 5 gives this process time to exit and release kim.log.
-        ps_lines = ["Start-Sleep 5"]
+        # Step 0: kill any orphaned _remind-fire subprocesses that are still
+        # sleeping with kim.log open, then wait for this process to exit.
+        # _remind-fire procs are spawned via 'cmd /c kim _remind-fire ...' and
+        # hold their own RotatingFileHandler on kim.log — they must be gone
+        # before we can delete the file.  Windows-only issue; Linux/macOS
+        # subprocesses don't hold file locks after the parent exits.
+        ps_lines = [
+            "Get-WmiObject Win32_Process | "
+            "Where-Object { $_.CommandLine -like '*_remind-fire*' } | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            "Start-Sleep 5",
+        ]
         if deferred_kimdir:
             d = str(deferred_kimdir).replace("'", "''")
             log_file = str(deferred_kimdir / "kim.log").replace("'", "''")
