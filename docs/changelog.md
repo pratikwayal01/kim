@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.6] - 2026-04-05
+
+### Fixed
+- **`kim uninstall` WinError 32** — explicitly close all logging handlers before removing `~/.kim`, releasing the file lock on `kim.log` on Windows.
+- **`kim uninstall` "The batch file cannot be found."** — the currently-running `kim.bat` is no longer deleted in-process. A detached `cmd` is spawned to remove it ~2 s after the process exits, so cmd.exe can return cleanly.
+- **"Thank you for using kim!" is now always the last line** of uninstall output.
+
 ## [4.1.5] - 2026-04-05
 
 ### Added

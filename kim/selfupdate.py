@@ -531,8 +531,18 @@ def cmd_uninstall(args):
         except FileNotFoundError:
             print("No scheduled task found (or already removed).")
 
-    # Release log file handle before wiping KIM_DIR (Windows WinError 32)
+    # --- Release all log file handles before touching KIM_DIR ----------------
+    # logging.shutdown() alone is not enough on Windows — the RotatingFileHandler
+    # keeps the file open. Explicitly close every handler first.
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        try:
+            handler.close()
+        except Exception:
+            pass
+        root_logger.removeHandler(handler)
     logging.shutdown()
+    # --------------------------------------------------------------------------
 
     binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
     if system == "Darwin":
@@ -543,10 +553,21 @@ def cmd_uninstall(args):
     elif system == "Windows":
         binary_candidates += [
             Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
+            Path.home() / ".local" / "bin" / "kim.bat",
         ]
+
+    # On Windows, shutil.which("kim") may resolve to the currently-executing
+    # kim.bat.  Deleting it while cmd.exe is running it causes the
+    # "The batch file cannot be found." error after the process exits.
+    # We collect it separately and schedule a deferred self-deletion instead.
+    deferred_bat = None
     _which = shutil.which("kim")
     if _which:
-        binary_candidates.append(Path(_which).resolve())
+        which_path = Path(_which).resolve()
+        if system == "Windows" and which_path.suffix.lower() == ".bat":
+            deferred_bat = which_path
+        else:
+            binary_candidates.append(which_path)
 
     for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):
         if path.exists():
@@ -566,6 +587,27 @@ def cmd_uninstall(args):
                     print(f"Could not remove {path}: {e}")
                     continue
             print(f"Removed {path}")
+
+    # Deferred deletion of the currently-running .bat on Windows.
+    # Spawns a detached cmd that waits 2 s then deletes the file — by then
+    # this process has already exited so there is no file-in-use conflict.
+    if deferred_bat and deferred_bat.exists():
+        try:
+            _sp.Popen(
+                [
+                    "cmd",
+                    "/c",
+                    f'ping -n 3 127.0.0.1 >nul & del /f /q "{deferred_bat}"',
+                ],
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+                close_fds=True,
+                stdin=_sp.DEVNULL,
+                stdout=_sp.DEVNULL,
+                stderr=_sp.DEVNULL,
+                shell=False,
+            )
+        except Exception:
+            pass  # non-fatal — the .bat is harmless without KIM_DIR
 
     print(f"\n{CHECK} kim has been uninstalled.")
     print("Thank you for using kim!")
