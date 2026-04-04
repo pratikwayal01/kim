@@ -669,17 +669,24 @@ def cmd_uninstall(args):
     deferred_files = [p for p in (deferred_bat, deferred_exe) if p and p.exists()]
     if deferred_files or deferred_kimdir:
         # Use PowerShell for the deferred cleanup — cleaner quoting and retry logic.
-        # Start-Sleep 3 gives this process time to exit and release kim.log.
-        ps_lines = ["Start-Sleep 3"]
+        # Start-Sleep 5 gives this process time to exit and release kim.log.
+        ps_lines = ["Start-Sleep 5"]
         if deferred_kimdir:
             d = str(deferred_kimdir).replace("'", "''")
             log_file = str(deferred_kimdir / "kim.log").replace("'", "''")
-            # Delete kim.log explicitly first: it is the file locked by this
-            # process's RotatingFileHandler.  By the time Start-Sleep 3 has
-            # elapsed the Python process has exited and the OS handle is gone.
-            # Then retry rmdir up to 5 times with 1s gaps for any stragglers.
+            # Step 1: retry deleting kim.log up to 10 times with 1s gaps.
+            # It is locked by this process's RotatingFileHandler; the handle
+            # is released once the Python process fully exits (after the
+            # Start-Sleep above).  SilentlyContinue so a still-locked attempt
+            # doesn't abort the script.
             ps_lines.append(
-                f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue; "
+                f"for($j=0;$j -lt 10;$j++){{"
+                f"if(Test-Path '{log_file}'){{"
+                f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue;"
+                f"if(-not(Test-Path '{log_file}')){{break}};Start-Sleep 1}}else{{break}}}}"
+            )
+            # Step 2: now that kim.log is gone, retry rmdir up to 5 times.
+            ps_lines.append(
                 f"for($i=0;$i -lt 5;$i++){{"
                 f"if(Test-Path '{d}'){{"
                 f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"

@@ -1828,54 +1828,46 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
         )
 
     def test_log_file_removed_before_rmdir(self):
-        """In the PS script, Remove-Item for kim.log must appear before the
-        rmdir retry loop so it is deleted first once the process exits."""
+        """The kim.log retry loop must appear before the rmdir retry loop."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate.cmd_uninstall)
-        # Find the positions of the kim.log Remove-Item and the retry loop marker
-        log_remove_pos = src.find("kim.log")
-        retry_loop_pos = src.find("$i=0;$i -lt 5")
+        # kim.log retry uses $j; rmdir retry uses $i — find both
+        log_loop_pos = src.find("$j=0;$j -lt 10")
+        rmdir_loop_pos = src.find("$i=0;$i -lt 5")
         self.assertGreater(
-            log_remove_pos,
+            log_loop_pos,
             0,
-            "kim.log reference not found in cmd_uninstall",
+            "kim.log retry loop ($j) not found in cmd_uninstall",
         )
         self.assertGreater(
-            retry_loop_pos,
+            rmdir_loop_pos,
             0,
-            "Retry loop not found in cmd_uninstall",
+            "rmdir retry loop ($i) not found in cmd_uninstall",
         )
         self.assertLess(
-            log_remove_pos,
-            retry_loop_pos,
-            "kim.log Remove-Item must appear before the rmdir retry loop in the PS script",
+            log_loop_pos,
+            rmdir_loop_pos,
+            "kim.log retry loop must appear before the rmdir retry loop",
         )
 
     def test_deferred_ps_script_structure(self):
-        """The deferred PS block must contain both an explicit log removal and
-        a retry loop — not just a single Remove-Item -Recurse."""
+        """The deferred PS block must have two separate retry loops:
+        one for kim.log deletion and one for rmdir."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate.cmd_uninstall)
-        # Both the log file removal and retry loop must be present
+        self.assertIn("kim.log", src, "Must explicitly remove kim.log")
         self.assertIn(
-            "kim.log",
-            src,
-            "Must explicitly remove kim.log",
+            "$j=0;$j -lt 10", src, "Must have kim.log retry loop (up to 10 attempts)"
         )
         self.assertIn(
-            "Start-Sleep 1",
-            src,
-            "Must have retry delay between rmdir attempts",
+            "$i=0;$i -lt 5", src, "Must have rmdir retry loop (up to 5 attempts)"
         )
-        self.assertIn(
-            "Test-Path",
-            src,
-            "Must check if directory still exists before retry",
-        )
+        self.assertIn("Start-Sleep 1", src, "Must have retry delay between attempts")
+        self.assertIn("Test-Path", src, "Must check path existence before retry")
 
 
 if __name__ == "__main__":
