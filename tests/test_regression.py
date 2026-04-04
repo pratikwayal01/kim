@@ -1796,5 +1796,87 @@ class TestUninstallDeferredExe(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# selfupdate.py — cmd_uninstall explicit kim.log deletion before rmdir (v4.1.9)
+#
+# Bug: deferred PowerShell retried rmdir on ~/.kim but kim.log was still locked
+#      at that moment because the Python process had not yet exited when the
+#      retry loop ran (only Start-Sleep 3 elapsed, but the process exit was
+#      racing the sleep).  Result: ~/.kim and kim.log left behind.
+# Fix: explicitly Remove-Item kim.log *before* the rmdir retry loop so that
+#      once the process exits and the OS handle is released, the log file is
+#      deleted first, leaving an empty directory that rmdir can remove.
+# ---------------------------------------------------------------------------
+
+
+class TestUninstallKimLogExplicitDelete(unittest.TestCase):
+    """The deferred PS script must explicitly delete kim.log before rmdir."""
+
+    def _get_uninstall_src(self):
+        import inspect
+        from kim import selfupdate
+
+        return inspect.getsource(selfupdate.cmd_uninstall)
+
+    def test_kim_log_path_in_deferred_ps_block(self):
+        """The deferred PowerShell block must reference 'kim.log' explicitly."""
+        src = self._get_uninstall_src()
+        self.assertIn(
+            "kim.log",
+            src,
+            "cmd_uninstall deferred PS block must explicitly remove kim.log",
+        )
+
+    def test_log_file_removed_before_rmdir(self):
+        """In the PS script, Remove-Item for kim.log must appear before the
+        rmdir retry loop so it is deleted first once the process exits."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate.cmd_uninstall)
+        # Find the positions of the kim.log Remove-Item and the retry loop marker
+        log_remove_pos = src.find("kim.log")
+        retry_loop_pos = src.find("$i=0;$i -lt 5")
+        self.assertGreater(
+            log_remove_pos,
+            0,
+            "kim.log reference not found in cmd_uninstall",
+        )
+        self.assertGreater(
+            retry_loop_pos,
+            0,
+            "Retry loop not found in cmd_uninstall",
+        )
+        self.assertLess(
+            log_remove_pos,
+            retry_loop_pos,
+            "kim.log Remove-Item must appear before the rmdir retry loop in the PS script",
+        )
+
+    def test_deferred_ps_script_structure(self):
+        """The deferred PS block must contain both an explicit log removal and
+        a retry loop — not just a single Remove-Item -Recurse."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate.cmd_uninstall)
+        # Both the log file removal and retry loop must be present
+        self.assertIn(
+            "kim.log",
+            src,
+            "Must explicitly remove kim.log",
+        )
+        self.assertIn(
+            "Start-Sleep 1",
+            src,
+            "Must have retry delay between rmdir attempts",
+        )
+        self.assertIn(
+            "Test-Path",
+            src,
+            "Must check if directory still exists before retry",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

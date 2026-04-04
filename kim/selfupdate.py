@@ -673,8 +673,13 @@ def cmd_uninstall(args):
         ps_lines = ["Start-Sleep 3"]
         if deferred_kimdir:
             d = str(deferred_kimdir).replace("'", "''")
-            # Retry up to 5 times with 1s gaps in case the log fd takes a moment.
+            log_file = str(deferred_kimdir / "kim.log").replace("'", "''")
+            # Delete kim.log explicitly first: it is the file locked by this
+            # process's RotatingFileHandler.  By the time Start-Sleep 3 has
+            # elapsed the Python process has exited and the OS handle is gone.
+            # Then retry rmdir up to 5 times with 1s gaps for any stragglers.
             ps_lines.append(
+                f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue; "
                 f"for($i=0;$i -lt 5;$i++){{"
                 f"if(Test-Path '{d}'){{"
                 f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"
