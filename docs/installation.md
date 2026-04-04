@@ -1,6 +1,36 @@
 # Installation
 
-## pip (Recommended — all platforms)
+## Automatic Installation (Recommended)
+
+### Linux / macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
+```
+
+The script will:
+1. Check / install Python 3
+2. Install `kim-reminder` via pip
+3. Add `~/.local/bin` to PATH if needed
+4. Set up autostart (systemd user service on Linux, launchd agent on macOS)
+5. Start the daemon
+
+### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
+```
+
+The script will:
+1. Check / install Python 3
+2. Install `kim-reminder` via pip
+3. Add the pip Scripts directory to your user PATH automatically
+4. Set up Task Scheduler for autostart
+5. Start the daemon
+
+---
+
+## pip (manual — all platforms)
 
 [![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
 
@@ -8,39 +38,21 @@
 pip install kim-reminder
 ```
 
-Then run `kim start` to launch the daemon. That's all.
+Then run `kim start` to launch the daemon.
 
-> pip installs the `kim` command globally. Autostart (systemd / launchd / Task Scheduler)
-> is set up the first time you run `kim start`.
+> **Windows note:** pip installs the `kim.exe` script into a user Scripts directory
+> that is often **not on PATH** by default. If `kim` is not found after install,
+> run the following once in PowerShell to fix it:
+>
+> ```powershell
+> $p = python -c "import sysconfig; print(sysconfig.get_path('scripts','nt_user'))"
+> [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";" + $p, "User")
+> $env:PATH += ";$p"
+> ```
+>
+> Open a new terminal window and `kim --version` should work.
 
-## Automatic Installation (binary + autostart)
-
-### Linux / macOS
-
-Run the install script (curl):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
-```
-
-The script will:
-1. Download the latest binary for your platform
-2. Install to `~/.local/bin/kim` (or `/usr/local/bin/kim` if writable)
-3. Set up autostart (systemd user service on Linux, launchd agent on macOS)
-4. Start the daemon
-
-### Windows (PowerShell as Admin)
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
-```
-
-The script will:
-1. Download the latest Windows executable
-2. Install to `AppData\Local\Programs\kim\kim.exe`
-3. Add to PATH
-4. Set up Task Scheduler for autostart
-5. Start the daemon
+---
 
 ## Manual Installation
 
@@ -54,21 +66,16 @@ The script will:
 
 2. No dependencies required — pure Python stdlib.
 
-3. Run directly:
+3. Install in editable mode:
    ```bash
-   python kim.py start
-   ```
-
-4. Optionally install globally:
-   ```bash
-   python kim.py  # ensure it's executable
-   cp kim.py /usr/local/bin/kim
-   chmod +x /usr/local/bin/kim
+   pip install -e .
    ```
 
 ### Prebuilt Binaries
 
 Download the latest binary for your platform from [GitHub Releases](https://github.com/pratikwayal01/kim/releases).
+
+---
 
 ## Post-Installation
 
@@ -106,16 +113,32 @@ kim uninstall
 
 This will:
 - Stop the daemon
-- Remove systemd/launchd/Task Scheduler entries
+- Remove systemd / launchd / Task Scheduler entries
 - Delete configuration and log files
 - Remove the binary
 
 ## Troubleshooting
 
-### Permission Issues
+### `kim` not found after `pip install` (Windows)
 
-- On Linux/macOS, ensure `~/.local/bin` is in your PATH
-- On Windows, run PowerShell as Administrator for installation
+pip installs `kim.exe` to a user Scripts directory that may not be on PATH.
+Run this once in PowerShell:
+
+```powershell
+$p = python -c "import sysconfig; print(sysconfig.get_path('scripts','nt_user'))"
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";" + $p, "User")
+$env:PATH += ";$p"
+```
+
+Open a new terminal — `kim --version` should now work.
+
+### `kim` not found after `pip install` (Linux / macOS)
+
+Ensure `~/.local/bin` is in your PATH. Add this to your shell config (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ### Daemon Not Starting
 
