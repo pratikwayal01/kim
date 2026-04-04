@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-04-05
+
+### Fixed
+- **Windows PATH instructions** — README now shows a copy-paste one-liner to fix PATH after `pip install`. `install.ps1` also auto-fixes the pip Scripts PATH for users who already installed via pip.
+
 ## [4.1.1] - 2026-04-05
 
 ### Fixed

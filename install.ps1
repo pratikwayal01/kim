@@ -137,6 +137,17 @@ $state = (Get-ScheduledTask -TaskName $TaskName).State
 if ($state -eq "Running") { Ok "Task running ✓" }
 else { Warn "Task state: $state — check Task Scheduler manually" }
 
+# ── Fix pip Scripts PATH (helps users who did pip install without this script) ─
+$pipScripts = & $PythonCmd -c "import sysconfig; print(sysconfig.get_path('scripts','nt_user'))" 2>$null
+if ($pipScripts -and (Test-Path $pipScripts)) {
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath -notlike "*$pipScripts*") {
+        [Environment]::SetEnvironmentVariable("PATH", "$userPath;$pipScripts", "User")
+        $env:PATH += ";$pipScripts"
+        Ok "Added pip Scripts dir to PATH: $pipScripts"
+    }
+}
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 Hdr "Done!"
 Write-Host "  kim is installed and running.`n"

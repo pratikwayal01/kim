@@ -11,21 +11,29 @@
 
 ## Install
 
-**pip** (all platforms)
+**Linux / macOS**
+```bash
+curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
+```
+
+**Windows** (PowerShell — installs, fixes PATH, sets up autostart)
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
+```
+
+**pip** (all platforms — PATH must be configured manually on Windows, see below)
 ```bash
 pip install kim-reminder
 ```
 [![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
 
-**Linux / macOS** (binary, autostart setup)
-```bash
-curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
-```
-
-**Windows** (PowerShell as Admin, binary, autostart setup)
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
-```
+> **Windows + pip:** After `pip install`, run this once to add `kim` to your PATH:
+> ```powershell
+> $p = python -c "import sysconfig; print(sysconfig.get_path('scripts','nt_user'))"
+> [Environment]::SetEnvironmentVariable("PATH",$env:PATH+";"+$p,"User")
+> $env:PATH += ";$p"
+> ```
+> Then `kim --version` should work. Open a new terminal for the change to persist.
 
 That's it. kim starts automatically on login.
 
