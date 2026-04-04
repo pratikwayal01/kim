@@ -1875,5 +1875,69 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
         self.assertIn("Test-Path", src, "Must check path existence before retry")
 
 
+# ---------------------------------------------------------------------------
+# selfupdate.py — cmd_uninstall kills orphaned _remind-fire processes (v4.1.9)
+#
+# Bug: 'kim remind' spawns background python subprocesses that sleep until
+#      their timer fires.  If the daemon is stopped while they are sleeping,
+#      they remain alive with kim.log open via their own RotatingFileHandler.
+#      The deferred PS script cannot delete kim.log because these orphans still
+#      hold the file handle — uninstall leaves ~/.kim/kim.log behind.
+# Fix: before releasing log handles, enumerate and kill any python process
+#      whose command line matches '*kim.py*_remind-fire*' via wmic on Windows.
+# ---------------------------------------------------------------------------
+
+
+class TestUninstallKillsOrphanRemindFire(unittest.TestCase):
+    """cmd_uninstall must kill orphaned _remind-fire subprocesses on Windows."""
+
+    def _get_uninstall_src(self):
+        import inspect
+        from kim import selfupdate
+
+        return inspect.getsource(selfupdate.cmd_uninstall)
+
+    def test_remind_fire_pattern_in_source(self):
+        """cmd_uninstall must search for _remind-fire processes."""
+        src = self._get_uninstall_src()
+        self.assertIn(
+            "_remind-fire",
+            src,
+            "cmd_uninstall must kill orphaned _remind-fire subprocesses",
+        )
+
+    def test_taskkill_used_to_terminate(self):
+        """cmd_uninstall must use taskkill /F to force-terminate orphans."""
+        src = self._get_uninstall_src()
+        self.assertIn(
+            "taskkill",
+            src,
+            "cmd_uninstall must use taskkill to kill orphaned processes",
+        )
+
+    def test_wmic_used_to_find_by_commandline(self):
+        """cmd_uninstall must use wmic to find processes by command line."""
+        src = self._get_uninstall_src()
+        self.assertIn(
+            "wmic",
+            src,
+            "cmd_uninstall must use wmic to enumerate processes by CommandLine",
+        )
+
+    def test_orphan_kill_before_log_handle_close(self):
+        """Orphan kill block must appear before the log handle close block,
+        so handles are released before we try to delete kim.log."""
+        src = self._get_uninstall_src()
+        orphan_kill_pos = src.find("_remind-fire")
+        log_close_pos = src.find("Release all log file handles")
+        self.assertGreater(orphan_kill_pos, 0, "_remind-fire not found")
+        self.assertGreater(log_close_pos, 0, "log handle close block not found")
+        self.assertLess(
+            orphan_kill_pos,
+            log_close_pos,
+            "Orphan kill must happen before log handle close",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
