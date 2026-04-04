@@ -1218,19 +1218,27 @@
 </tbody>
 </table>
 <h3 id="kim-add"><code>kim add</code><a class="headerlink" href="#kim-add" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kim<span class="w"> </span>add<span class="w"> </span>NAME<span class="w"> </span>-I<span class="w"> </span>INTERVAL<span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kim<span class="w"> </span>add<span class="w"> </span>NAME<span class="w"> </span><span class="o">(</span>-I<span class="p">|</span>-E<span class="w"> </span>INTERVAL<span class="w"> </span><span class="p">|</span><span class="w"> </span>--every<span class="w"> </span>INTERVAL<span class="w"> </span><span class="p">|</span><span class="w"> </span>--at<span class="w"> </span>HH:MM<span class="o">)</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tz<span class="w"> </span>TZ<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
 </code></pre></div>
 <p><strong>Options:</strong>
-- <code>-I, --interval</code> — Interval (e.g., <code>30m</code>, <code>1h</code>, <code>1d</code>, or just number for minutes) [required]
+- <code>-I, --interval, --every</code> — Recurring interval (e.g., <code>30m</code>, <code>1h</code>, <code>1d</code>) [required unless --at]
+- <code>--at HH:MM</code> — Fire daily at a fixed time, e.g. <code>--at 10:00</code> [required unless --interval]
 - <code>-t, --title</code> — Notification title
 - <code>-m, --message</code> — Notification message
 - <code>-u, --urgency</code> — <code>low</code>, <code>normal</code>, <code>critical</code> (default: <code>normal</code>)
+- <code>--tz TZ</code> — IANA timezone for <code>--at</code>, e.g. <code>Asia/Kolkata</code> (default: local system timezone)
 - <code>--sound-file</code> — Per-reminder sound file path (overrides global)
 - <code>--slack-channel</code> — Per-reminder Slack channel
 - <code>--slack-webhook</code> — Per-reminder Slack webhook URL</p>
 <p><strong>Example:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kim<span class="w"> </span>add<span class="w"> </span>eye-break<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>-t<span class="w"> </span><span class="s2">&quot;👁️ Eye Break&quot;</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Look away from screen&quot;</span><span class="w"> </span>-u<span class="w"> </span>critical
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kim<span class="w"> </span>add<span class="w"> </span>standup<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>--slack-channel<span class="w"> </span><span class="s2">&quot;#standup&quot;</span><span class="w"> </span>--sound-file<span class="w"> </span>~/sounds/urgent.wav
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Interval-based (unchanged, --every is now also accepted)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kim<span class="w"> </span>add<span class="w"> </span>eye-break<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>-t<span class="w"> </span><span class="s2">&quot;👁️ Eye Break&quot;</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Look away from screen&quot;</span><span class="w"> </span>-u<span class="w"> </span>critical
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>kim<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;drink water&quot;</span><span class="w"> </span>--every<span class="w"> </span>1h
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>kim<span class="w"> </span>add<span class="w"> </span>standup<span class="w"> </span>-I<span class="w"> </span>30m<span class="w"> </span>--slack-channel<span class="w"> </span><span class="s2">&quot;#standup&quot;</span><span class="w"> </span>--sound-file<span class="w"> </span>~/sounds/urgent.wav
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># Daily at a fixed time</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>kim<span class="w"> </span>add<span class="w"> </span>standup<span class="w"> </span>--at<span class="w"> </span><span class="m">10</span>:00
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>kim<span class="w"> </span>add<span class="w"> </span>standup<span class="w"> </span>--at<span class="w"> </span><span class="m">10</span>:00<span class="w"> </span>--tz<span class="w"> </span>Asia/Kolkata
 </code></pre></div></p>
 <h3 id="kim-remove"><code>kim remove</code><a class="headerlink" href="#kim-remove" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kim<span class="w"> </span>remove<span class="w"> </span>NAME
@@ -1240,22 +1248,41 @@
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kim<span class="w"> </span>disable<span class="w"> </span>NAME
 </code></pre></div>
 <h3 id="kim-update"><code>kim update</code><a class="headerlink" href="#kim-update" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kim<span class="w"> </span>update<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>INTERVAL<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--enable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--disable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kim<span class="w"> </span>update<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>INTERVAL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--every<span class="w"> </span>INTERVAL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--at<span class="w"> </span>HH:MM<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tz<span class="w"> </span>TZ<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-u<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--enable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--disable<span class="o">]</span><span class="w"> </span><span class="o">[</span>--sound-file<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-channel<span class="w"> </span>CHANNEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slack-webhook<span class="w"> </span>URL<span class="o">]</span>
 </code></pre></div>
 <p><strong>New options:</strong>
+- <code>--every</code> — Alias for <code>--interval</code>
+- <code>--at HH:MM</code> — Switch to daily at-time schedule
+- <code>--tz TZ</code> — Timezone for <code>--at</code>
 - <code>--sound-file</code> — Set per-reminder sound file
 - <code>--slack-channel</code> — Set per-reminder Slack channel
 - <code>--slack-webhook</code> — Set per-reminder Slack webhook URL</p>
 <h2 id="one-shot-reminders">One-shot Reminders<a class="headerlink" href="#one-shot-reminders" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>remind<span class="w"> </span>MESSAGE<span class="w"> </span>TIME<span class="w"> </span><span class="o">[</span>TIME<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>remind<span class="w"> </span>MESSAGE<span class="w"> </span>TIME<span class="w"> </span><span class="o">[</span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tz<span class="w"> </span>TZ<span class="o">]</span>
 </code></pre></div>
-<p><strong>TIME format:</strong> <code>in 10m</code>, <code>1h</code>, <code>2h 30m</code>, <code>90s</code></p>
-<p><strong>Examples:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>10m
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;take a break&quot;</span><span class="w"> </span>1h
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;deploy window opens&quot;</span><span class="w"> </span>2h<span class="w"> </span>30m
+<p><strong>TIME — relative:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>in 10m      10 minutes from now
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>1h          1 hour
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>2h 30m      2 hours 30 minutes
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>90s         90 seconds
 </code></pre></div></p>
-<p><strong>Persistence:</strong> One-shot reminders are persisted to disk (<code>~/.kim/oneshots.json</code>) and will survive daemon restarts and system reboots. When the daemon starts, it loads any pending one-shot reminders and fires them at the scheduled time. Expired reminders are automatically cleaned up.</p>
+<p><strong>TIME — absolute (<code>at ...</code>):</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>at 14:30               today at 14:30 (or tomorrow if already past)
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>at tomorrow 10am       tomorrow at 10:00
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>at friday 9am          next Friday at 09:00
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>at 2026-04-06 09:00    specific date and time
+</code></pre></div></p>
+<p><strong>Options:</strong>
+- <code>--tz TZ</code> — IANA timezone for absolute times (default: local system timezone)</p>
+<p><strong>Examples:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>10m
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;take a break&quot;</span><span class="w"> </span>1h
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;deploy window opens&quot;</span><span class="w"> </span>2h<span class="w"> </span>30m
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup&quot;</span><span class="w"> </span>at<span class="w"> </span><span class="m">10</span>:00
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup&quot;</span><span class="w"> </span>at<span class="w"> </span>tomorrow<span class="w"> </span>9am
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;call&quot;</span><span class="w"> </span>at<span class="w"> </span><span class="m">2026</span>-04-06<span class="w"> </span><span class="m">14</span>:30<span class="w"> </span>--tz<span class="w"> </span>America/New_York
+</code></pre></div></p>
+<p><strong>Persistence:</strong> One-shot reminders are persisted to disk (<code>~/.kim/oneshots.json</code>) and survive daemon restarts and system reboots. Expired reminders are automatically cleaned up.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1284,21 +1311,21 @@
 </tbody>
 </table>
 <h3 id="kim-export"><code>kim export</code><a class="headerlink" href="#kim-export" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kim<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="o">[</span>-f<span class="w"> </span>FORMAT<span class="o">]</span><span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kim<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="o">[</span>-f<span class="w"> </span>FORMAT<span class="o">]</span><span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT<span class="o">]</span>
 </code></pre></div>
 <p><strong>FORMAT:</strong> <code>json</code> (default), <code>csv</code></p>
 <p><strong>Example:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kim<span class="w"> </span><span class="nb">export</span><span class="w"> </span>-f<span class="w"> </span>csv<span class="w"> </span>-o<span class="w"> </span>reminders.csv
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kim<span class="w"> </span><span class="nb">export</span><span class="w"> </span>-f<span class="w"> </span>csv<span class="w"> </span>-o<span class="w"> </span>reminders.csv
 </code></pre></div></p>
 <h3 id="kim-import"><code>kim import</code><a class="headerlink" href="#kim-import" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kim<span class="w"> </span>import<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>-f<span class="w"> </span>FORMAT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--merge<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kim<span class="w"> </span>import<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>-f<span class="w"> </span>FORMAT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--merge<span class="o">]</span>
 </code></pre></div>
 <p><strong>FORMAT:</strong> <code>json</code>, <code>csv</code>, <code>auto</code> (default: auto-detect)</p>
 <p><strong>Example:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kim<span class="w"> </span>import<span class="w"> </span>reminders.json<span class="w"> </span>--merge
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kim<span class="w"> </span>import<span class="w"> </span>reminders.json<span class="w"> </span>--merge
 </code></pre></div></p>
 <h2 id="sound-configuration">Sound Configuration<a class="headerlink" href="#sound-configuration" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kim<span class="w"> </span>sound<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kim<span class="w"> </span>sound<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
 <p><strong>Options:</strong>
 - <code>--set FILE</code> — Set custom sound file
@@ -1307,18 +1334,18 @@
 - <code>--enable</code> — Enable sound notifications
 - <code>--disable</code> — Disable sound notifications</p>
 <p><strong>Examples:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kim<span class="w"> </span>sound<span class="w"> </span>--set<span class="w"> </span>~/sounds/bell.mp3
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>kim<span class="w"> </span>sound<span class="w"> </span>--test
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>kim<span class="w"> </span>sound<span class="w"> </span>--disable
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kim<span class="w"> </span>sound<span class="w"> </span>--set<span class="w"> </span>~/sounds/bell.mp3
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>kim<span class="w"> </span>sound<span class="w"> </span>--test
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>kim<span class="w"> </span>sound<span class="w"> </span>--disable
 </code></pre></div></p>
 <h2 id="slack-integration">Slack Integration<a class="headerlink" href="#slack-integration" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kim<span class="w"> </span>slack<span class="w"> </span><span class="o">[</span>--test<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kim<span class="w"> </span>slack<span class="w"> </span><span class="o">[</span>--test<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>-m<span class="w"> </span>MESSAGE<span class="o">]</span>
 </code></pre></div>
 <p><strong>Example:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kim<span class="w"> </span>slack<span class="w"> </span>--test<span class="w"> </span>-t<span class="w"> </span><span class="s2">&quot;Test&quot;</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Hello from kim&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>kim<span class="w"> </span>slack<span class="w"> </span>--test<span class="w"> </span>-t<span class="w"> </span><span class="s2">&quot;Test&quot;</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Hello from kim&quot;</span>
 </code></pre></div></p>
 <h2 id="interactive-mode">Interactive Mode<a class="headerlink" href="#interactive-mode" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kim<span class="w"> </span>interactive<span class="w">   </span><span class="c1"># or kim -i</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kim<span class="w"> </span>interactive<span class="w">   </span><span class="c1"># or kim -i</span>
 </code></pre></div>
 <p>A text-based UI for managing reminders. Use arrow keys to navigate, Enter to select.</p>
 <h2 id="self-update-uninstall">Self-Update &amp; Uninstall<a class="headerlink" href="#self-update-uninstall" title="Permanent link">&para;</a></h2>
@@ -1341,16 +1368,16 @@
 </tbody>
 </table>
 <h3 id="kim-self-update"><code>kim self-update</code><a class="headerlink" href="#kim-self-update" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>kim<span class="w"> </span>self-update<span class="w"> </span><span class="o">[</span>-f<span class="o">]</span><span class="w">   </span><span class="c1"># Skip confirmation prompt</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>kim<span class="w"> </span>self-update<span class="w"> </span><span class="o">[</span>-f<span class="o">]</span><span class="w">   </span><span class="c1"># Skip confirmation prompt</span>
 </code></pre></div>
 <h2 id="shell-completions">Shell Completions<a class="headerlink" href="#shell-completions" title="Permanent link">&para;</a></h2>
 <p>Generate shell completions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="w">   </span><span class="c1"># Bash</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>kim<span class="w"> </span>completion<span class="w"> </span>zsh<span class="w">    </span><span class="c1"># Zsh  </span>
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>kim<span class="w"> </span>completion<span class="w"> </span>fish<span class="w">   </span><span class="c1"># Fish</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="w">   </span><span class="c1"># Bash</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>kim<span class="w"> </span>completion<span class="w"> </span>zsh<span class="w">    </span><span class="c1"># Zsh  </span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>kim<span class="w"> </span>completion<span class="w"> </span>fish<span class="w">   </span><span class="c1"># Fish</span>
 </code></pre></div>
 <p>Add to your shell config (e.g., <code>.bashrc</code>):
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="k">)</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="k">)</span><span class="s2">&quot;</span>
 </code></pre></div></p>
 
 
