@@ -49,8 +49,13 @@ def _detect_install_type():
     "script" — ~/.kim/kim.py exists and the kim wrapper calls it
     "binary" — kim on PATH is a compiled standalone exe / ELF binary
     "unknown"— cannot determine; fall back to pip-upgrade attempt
+
+    Priority: pip > binary > script.
+    The pip check must win even if ~/.kim/kim.py also exists (a leftover from a
+    previous script install does not mean the active install is a script).
     """
-    # 1. pip / editable install — fastest check
+    # 1. pip / editable install — authoritative: if the package metadata exists,
+    #    pip owns this install regardless of what else is on disk.
     try:
         import importlib.metadata
 
@@ -59,19 +64,14 @@ def _detect_install_type():
     except Exception:
         pass
 
-    # 2. Script install — ~/.kim/kim.py exists
-    script_path = KIM_DIR / "kim.py"
-    if script_path.exists():
-        return "script"
-
-    # 3. Binary install — kim on PATH is an actual executable, not a script
+    # 2. Binary install — kim on PATH is a compiled standalone exe / ELF binary.
+    #    Check this before the script heuristic because a binary install does not
+    #    leave ~/.kim/kim.py, but a prior script install might have.
     kim_bin = shutil.which("kim")
     if kim_bin:
         p = Path(kim_bin).resolve()
-        # .exe suffix → clearly a binary
         if p.suffix.lower() == ".exe":
             return "binary"
-        # no suffix → could be ELF or Mach-O; check magic bytes
         if p.suffix == "":
             try:
                 magic = p.read_bytes()[:4]
@@ -90,6 +90,11 @@ def _detect_install_type():
             except OSError:
                 pass
 
+    # 3. Script install — ~/.kim/kim.py exists (last resort)
+    script_path = KIM_DIR / "kim.py"
+    if script_path.exists():
+        return "script"
+
     return "unknown"
 
 
@@ -106,7 +111,19 @@ def _fetch_latest_release():
         return json.loads(r.read().decode())
 
 
-def _find_asset(assets, name):
+def _parse_version(v: str) -> tuple:
+    """
+    Parse a 'X.Y.Z' version string into a comparable integer tuple.
+    Non-numeric parts are treated as 0 so pre-release suffixes don't crash.
+    """
+    parts = []
+    for segment in v.strip().lstrip("v").split("."):
+        try:
+            parts.append(int(segment))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
     """Return browser_download_url for the asset whose name contains `name`."""
     for a in assets:
         if name in a.get("name", ""):
@@ -423,8 +440,19 @@ def cmd_selfupdate(args):
         print("Could not determine latest version from GitHub API.")
         return
 
-    if latest_version == VERSION:
+    current_tuple = _parse_version(VERSION)
+    latest_tuple = _parse_version(latest_version)
+
+    if latest_tuple == current_tuple:
         print(f"Already up to date ({VERSION}).")
+        return
+
+    if latest_tuple < current_tuple:
+        print(
+            f"Already up to date ({VERSION}). "
+            f"(Latest GitHub release is {latest_version} — "
+            "a newer version may not have been released to GitHub yet.)"
+        )
         return
 
     print(f"New version available: {latest_version}  (you have {VERSION})")
