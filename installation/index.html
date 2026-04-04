@@ -484,26 +484,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pip-recommended-all-platforms" class="md-nav__link">
+  <a href="#automatic-installation-recommended" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pip (Recommended — all platforms)
+        Automatic Installation (Recommended)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#automatic-installation-binary-autostart" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Automatic Installation (binary + autostart)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Automatic Installation (binary + autostart)">
+    <nav class="md-nav" aria-label="Automatic Installation (Recommended)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -518,10 +507,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#windows-powershell-as-admin" class="md-nav__link">
+  <a href="#windows-powershell" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Windows (PowerShell as Admin)
+        Windows (PowerShell)
       
     </span>
   </a>
@@ -530,6 +519,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pip-manual-all-platforms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pip (manual — all platforms)
+      
+    </span>
+  </a>
   
 </li>
       
@@ -657,10 +657,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#permission-issues" class="md-nav__link">
+  <a href="#kim-not-found-after-pip-install-windows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Permission Issues
+        kim not found after pip install (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kim-not-found-after-pip-install-linux-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        kim not found after pip install (Linux / macOS)
       
     </span>
   </a>
@@ -880,26 +891,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pip-recommended-all-platforms" class="md-nav__link">
+  <a href="#automatic-installation-recommended" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pip (Recommended — all platforms)
+        Automatic Installation (Recommended)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#automatic-installation-binary-autostart" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Automatic Installation (binary + autostart)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Automatic Installation (binary + autostart)">
+    <nav class="md-nav" aria-label="Automatic Installation (Recommended)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -914,10 +914,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#windows-powershell-as-admin" class="md-nav__link">
+  <a href="#windows-powershell" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Windows (PowerShell as Admin)
+        Windows (PowerShell)
       
     </span>
   </a>
@@ -926,6 +926,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pip-manual-all-platforms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pip (manual — all platforms)
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1053,10 +1064,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#permission-issues" class="md-nav__link">
+  <a href="#kim-not-found-after-pip-install-windows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Permission Issues
+        kim not found after pip install (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kim-not-found-after-pip-install-linux-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        kim not found after pip install (Linux / macOS)
       
     </span>
   </a>
@@ -1100,61 +1122,63 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<h2 id="pip-recommended-all-platforms">pip (Recommended — all platforms)<a class="headerlink" href="#pip-recommended-all-platforms" title="Permanent link">&para;</a></h2>
-<p><a href="https://pypi.org/project/kim-reminder/"><img alt="PyPI" src="https://img.shields.io/pypi/v/kim-reminder" /></a></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>kim-reminder
-</code></pre></div>
-<p>Then run <code>kim start</code> to launch the daemon. That's all.</p>
-<blockquote>
-<p>pip installs the <code>kim</code> command globally. Autostart (systemd / launchd / Task Scheduler)
-is set up the first time you run <code>kim start</code>.</p>
-</blockquote>
-<h2 id="automatic-installation-binary-autostart">Automatic Installation (binary + autostart)<a class="headerlink" href="#automatic-installation-binary-autostart" title="Permanent link">&para;</a></h2>
+<h2 id="automatic-installation-recommended">Automatic Installation (Recommended)<a class="headerlink" href="#automatic-installation-recommended" title="Permanent link">&para;</a></h2>
 <h3 id="linux-macos">Linux / macOS<a class="headerlink" href="#linux-macos" title="Permanent link">&para;</a></h3>
-<p>Run the install script (curl):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
 </code></pre></div>
 <p>The script will:
-1. Download the latest binary for your platform
-2. Install to <code>~/.local/bin/kim</code> (or <code>/usr/local/bin/kim</code> if writable)
-3. Set up autostart (systemd user service on Linux, launchd agent on macOS)
-4. Start the daemon</p>
-<h3 id="windows-powershell-as-admin">Windows (PowerShell as Admin)<a class="headerlink" href="#windows-powershell-as-admin" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
+1. Check / install Python 3
+2. Install <code>kim-reminder</code> via pip
+3. Add <code>~/.local/bin</code> to PATH if needed
+4. Set up autostart (systemd user service on Linux, launchd agent on macOS)
+5. Start the daemon</p>
+<h3 id="windows-powershell">Windows (PowerShell)<a class="headerlink" href="#windows-powershell" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">Bypass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex&quot;</span>
 </code></pre></div>
 <p>The script will:
-1. Download the latest Windows executable
-2. Install to <code>AppData\Local\Programs\kim\kim.exe</code>
-3. Add to PATH
+1. Check / install Python 3
+2. Install <code>kim-reminder</code> via pip
+3. Add the pip Scripts directory to your user PATH automatically
 4. Set up Task Scheduler for autostart
 5. Start the daemon</p>
+<hr />
+<h2 id="pip-manual-all-platforms">pip (manual — all platforms)<a class="headerlink" href="#pip-manual-all-platforms" title="Permanent link">&para;</a></h2>
+<p><a href="https://pypi.org/project/kim-reminder/"><img alt="PyPI" src="https://img.shields.io/pypi/v/kim-reminder" /></a></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>kim-reminder
+</code></pre></div>
+<p>Then run <code>kim start</code> to launch the daemon.</p>
+<blockquote>
+<p><strong>Windows note:</strong> pip installs the <code>kim.exe</code> script into a user Scripts directory
+that is often <strong>not on PATH</strong> by default. If <code>kim</code> is not found after install,
+run the following once in PowerShell to fix it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">$p</span> <span class="p">=</span> <span class="n">python</span> <span class="n">-c</span> <span class="s2">&quot;import sysconfig; print(sysconfig.get_path(&#39;scripts&#39;,&#39;nt_user&#39;))&quot;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;PATH&quot;</span><span class="p">,</span> <span class="nv">$env:PATH</span> <span class="p">+</span> <span class="s2">&quot;;&quot;</span> <span class="p">+</span> <span class="nv">$p</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">$env:PATH</span> <span class="p">+=</span> <span class="s2">&quot;;$p&quot;</span>
+</code></pre></div>
+<p>Open a new terminal window and <code>kim --version</code> should work.</p>
+</blockquote>
+<hr />
 <h2 id="manual-installation">Manual Installation<a class="headerlink" href="#manual-installation" title="Permanent link">&para;</a></h2>
 <h3 id="from-source">From Source<a class="headerlink" href="#from-source" title="Permanent link">&para;</a></h3>
 <ol>
 <li>
 <p>Clone the repository:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pratikwayal01/kim.git
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">cd</span><span class="w"> </span>kim
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pratikwayal01/kim.git
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">cd</span><span class="w"> </span>kim
 </code></pre></div></p>
 </li>
 <li>
 <p>No dependencies required — pure Python stdlib.</p>
 </li>
 <li>
-<p>Run directly:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>kim.py<span class="w"> </span>start
-</code></pre></div></p>
-</li>
-<li>
-<p>Optionally install globally:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>python<span class="w"> </span>kim.py<span class="w">  </span><span class="c1"># ensure it&#39;s executable</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>cp<span class="w"> </span>kim.py<span class="w"> </span>/usr/local/bin/kim
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>chmod<span class="w"> </span>+x<span class="w"> </span>/usr/local/bin/kim
+<p>Install in editable mode:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
 </code></pre></div></p>
 </li>
 </ol>
 <h3 id="prebuilt-binaries">Prebuilt Binaries<a class="headerlink" href="#prebuilt-binaries" title="Permanent link">&para;</a></h3>
 <p>Download the latest binary for your platform from <a href="https://github.com/pratikwayal01/kim/releases">GitHub Releases</a>.</p>
+<hr />
 <h2 id="post-installation">Post-Installation<a class="headerlink" href="#post-installation" title="Permanent link">&para;</a></h2>
 <p>After installation, kim starts automatically on login. You can manage it with:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>start<span class="w">      </span><span class="c1"># Start the daemon</span>
@@ -1175,21 +1199,28 @@ is set up the first time you run <code>kim start</code>.</p>
 </code></pre></div>
 <p>This will:
 - Stop the daemon
-- Remove systemd/launchd/Task Scheduler entries
+- Remove systemd / launchd / Task Scheduler entries
 - Delete configuration and log files
 - Remove the binary</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
-<h3 id="permission-issues">Permission Issues<a class="headerlink" href="#permission-issues" title="Permanent link">&para;</a></h3>
-<ul>
-<li>On Linux/macOS, ensure <code>~/.local/bin</code> is in your PATH</li>
-<li>On Windows, run PowerShell as Administrator for installation</li>
-</ul>
+<h3 id="kim-not-found-after-pip-install-windows"><code>kim</code> not found after <code>pip install</code> (Windows)<a class="headerlink" href="#kim-not-found-after-pip-install-windows" title="Permanent link">&para;</a></h3>
+<p>pip installs <code>kim.exe</code> to a user Scripts directory that may not be on PATH.
+Run this once in PowerShell:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">$p</span> <span class="p">=</span> <span class="n">python</span> <span class="n">-c</span> <span class="s2">&quot;import sysconfig; print(sysconfig.get_path(&#39;scripts&#39;,&#39;nt_user&#39;))&quot;</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;PATH&quot;</span><span class="p">,</span> <span class="nv">$env:PATH</span> <span class="p">+</span> <span class="s2">&quot;;&quot;</span> <span class="p">+</span> <span class="nv">$p</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nv">$env:PATH</span> <span class="p">+=</span> <span class="s2">&quot;;$p&quot;</span>
+</code></pre></div>
+<p>Open a new terminal — <code>kim --version</code> should now work.</p>
+<h3 id="kim-not-found-after-pip-install-linux-macos"><code>kim</code> not found after <code>pip install</code> (Linux / macOS)<a class="headerlink" href="#kim-not-found-after-pip-install-linux-macos" title="Permanent link">&para;</a></h3>
+<p>Ensure <code>~/.local/bin</code> is in your PATH. Add this to your shell config (<code>~/.bashrc</code>, <code>~/.zshrc</code>, etc.):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/.local/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span>
+</code></pre></div>
 <h3 id="daemon-not-starting">Daemon Not Starting<a class="headerlink" href="#daemon-not-starting" title="Permanent link">&para;</a></h3>
 <p>Check the logs:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kim<span class="w"> </span>logs
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kim<span class="w"> </span>logs
 </code></pre></div></p>
 <p>Ensure the config file is valid:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kim<span class="w"> </span>validate
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kim<span class="w"> </span>validate
 </code></pre></div></p>
 
 
