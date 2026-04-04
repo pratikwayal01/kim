@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..core import CONFIG, KIM_DIR, PID_FILE, VERSION, load_config, log
+from ..core import CONFIG, KIM_DIR, PID_FILE, RELOAD_FILE, VERSION, load_config, log
 from ..notifications import notify
 from ..sound import validate_sound_file
 from ..scheduler import KimScheduler
@@ -81,6 +81,33 @@ def _spawn_detached() -> int:
             stderr=subprocess.DEVNULL,
         )
     return proc.pid
+
+
+def _reload_config(scheduler: KimScheduler, current_config: dict) -> dict:
+    """
+    Re-read config.json and reconcile the live scheduler without a restart.
+    - New or updated enabled reminders  → scheduler.add_reminder()
+    - Disabled reminders                → scheduler.remove_reminder()
+    - Deleted reminders                 → scheduler.remove_reminder()
+    Returns the newly loaded config so the caller can replace its reference.
+    """
+    new_config = load_config()
+    old = {r["name"]: r for r in current_config.get("reminders", [])}
+    new = {r["name"]: r for r in new_config.get("reminders", [])}
+
+    for name, r in new.items():
+        if r.get("enabled", True):
+            scheduler.add_reminder(r)  # add new / update changed
+        else:
+            scheduler.remove_reminder(name)  # disabled → cancel from heap
+
+    for name in old:
+        if name not in new:
+            scheduler.remove_reminder(name)  # deleted → cancel from heap
+
+    active = sum(1 for r in new.values() if r.get("enabled", True))
+    log.info("Config reloaded — %d active reminder(s)", active)
+    return new_config
 
 
 def cmd_start(args):
@@ -205,12 +232,18 @@ def cmd_start(args):
         PID_FILE.unlink(missing_ok=True)
         sys.exit(0)
 
-    # SIGTERM can be delivered on Unix; on Windows it cannot be sent from
-    # another process (os.kill raises WinError 87), so only register it
-    # where it actually works.  SIGINT (Ctrl-C) works on both platforms.
+    # SIGTERM / SIGINT for graceful shutdown
     if platform.system() != "Windows":
         signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
+
+    # SIGHUP triggers a live config reload on Unix (kill -HUP <pid>)
+    if platform.system() != "Windows":
+
+        def _sighup(sig, frame):
+            RELOAD_FILE.touch()
+
+        signal.signal(signal.SIGHUP, _sighup)
 
     try:
         notify(
@@ -244,6 +277,12 @@ def cmd_start(args):
     try:
         while True:
             time.sleep(1)
+            if RELOAD_FILE.exists():
+                try:
+                    RELOAD_FILE.unlink(missing_ok=True)
+                    config = _reload_config(scheduler, config)
+                except Exception:
+                    log.exception("Config reload failed")
     except KeyboardInterrupt:
         shutdown(None, None)
 

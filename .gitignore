@@ -6,3 +6,4 @@ site/
 a.out
 build/
 dist/
+kim_reminder.egg-info/

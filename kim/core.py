@@ -18,6 +18,7 @@ CONFIG = KIM_DIR / "config.json"
 LOG_FILE = KIM_DIR / "kim.log"
 PID_FILE = KIM_DIR / "kim.pid"
 ONESHOT_FILE = KIM_DIR / "oneshots.json"
+RELOAD_FILE = KIM_DIR / "kim.reload"
 try:
     KIM_DIR.mkdir(exist_ok=True)
 except OSError:

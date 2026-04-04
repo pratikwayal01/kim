@@ -7,7 +7,15 @@ import os
 import platform
 import sys
 
-from ..core import CONFIG, load_config, log, parse_at_time
+from ..core import (
+    CONFIG,
+    KIM_DIR,
+    PID_FILE,
+    RELOAD_FILE,
+    load_config,
+    log,
+    parse_at_time,
+)
 from ..utils import CHECK
 
 # CREATE_NO_WINDOW flag used when spawning subprocesses on Windows
@@ -32,6 +40,15 @@ def _save_config(config: dict) -> None:
     except OSError as e:
         print(f"Error writing config file: {e}")
         sys.exit(1)
+
+
+def _signal_reload() -> None:
+    """Touch the reload flag file so the running daemon picks up config changes."""
+    if PID_FILE.exists():
+        try:
+            RELOAD_FILE.touch()
+        except OSError:
+            pass
 
 
 def cmd_add(args):
@@ -89,6 +106,7 @@ def cmd_add(args):
 
     config.setdefault("reminders", []).append(new_reminder)
     _save_config(config)
+    _signal_reload()
 
     print(f"{CHECK} Added reminder '{name}' ({schedule_desc})")
     log.info("Added reminder: %s", name)
@@ -107,6 +125,7 @@ def cmd_remove(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Removed reminder '{name}'")
     log.info("Removed reminder: %s", name)
 
@@ -127,6 +146,7 @@ def cmd_enable(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Enabled reminder '{name}'")
     log.info("Enabled reminder: %s", name)
 
@@ -147,6 +167,7 @@ def cmd_disable(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Disabled reminder '{name}'")
     log.info("Disabled reminder: %s", name)
 
@@ -195,5 +216,6 @@ def cmd_update(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Updated reminder '{name}'")
     log.info("Updated reminder: %s", name)
