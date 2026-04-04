@@ -10,6 +10,7 @@ import sys
 from ..core import (
     CONFIG,
     KIM_DIR,
+    ONESHOT_FILE,
     PID_FILE,
     RELOAD_FILE,
     load_config,
@@ -113,6 +114,11 @@ def cmd_add(args):
 
 
 def cmd_remove(args):
+    # --oneshot: remove from oneshots.json by index or message substring
+    if getattr(args, "oneshot", False):
+        _remove_oneshot(args.name)
+        return
+
     config = load_config()
     name = args.name
 
@@ -128,6 +134,70 @@ def cmd_remove(args):
     _signal_reload()
     print(f"{CHECK} Removed reminder '{name}'")
     log.info("Removed reminder: %s", name)
+
+
+def _remove_oneshot(token: str) -> None:
+    """Remove a pending one-shot by 1-based index or message substring."""
+    import time as _time
+    import datetime as _dt
+
+    if not ONESHOT_FILE.exists():
+        print("No pending one-shot reminders.")
+        sys.exit(1)
+
+    try:
+        import json as _json
+
+        oneshots = _json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"Could not read oneshots file: {e}")
+        sys.exit(1)
+
+    now = _time.time()
+    pending_indices = [i for i, o in enumerate(oneshots) if o.get("fire_at", 0) > now]
+
+    if not pending_indices:
+        print("No pending one-shot reminders.")
+        sys.exit(1)
+
+    target_idx = None
+
+    if token.isdigit():
+        n = int(token)
+        if 1 <= n <= len(pending_indices):
+            target_idx = pending_indices[n - 1]
+        else:
+            print(
+                f"No reminder at index {n}. Run 'kim list -o' to see pending one-shots."
+            )
+            sys.exit(1)
+    else:
+        token_lower = token.lower()
+        for idx in pending_indices:
+            if token_lower in oneshots[idx].get("message", "").lower():
+                target_idx = idx
+                break
+        if target_idx is None:
+            print(
+                f"No pending one-shot matching '{token}'. Run 'kim list -o' to see pending one-shots."
+            )
+            sys.exit(1)
+
+    removed = oneshots.pop(target_idx)
+    fire_dt = _dt.datetime.fromtimestamp(removed["fire_at"]).strftime("%Y-%m-%d %H:%M")
+
+    try:
+        import json as _json
+
+        _tmp = ONESHOT_FILE.with_suffix(".tmp")
+        _tmp.write_text(_json.dumps(oneshots, indent=2), encoding="utf-8")
+        _tmp.replace(ONESHOT_FILE)
+    except OSError as e:
+        print(f"Error writing oneshots file: {e}")
+        sys.exit(1)
+
+    print(f"{CHECK} Cancelled: '{removed.get('message', '')}' (was due at {fire_dt})")
+    log.info("One-shot reminder cancelled: '%s'", removed.get("message", ""))
 
 
 def cmd_enable(args):

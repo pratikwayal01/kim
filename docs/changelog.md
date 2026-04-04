@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.5] - 2026-04-05
+
+### Added
+- **`kim list -o` / `--oneshots`** — appends pending one-shot reminders to the list output, showing index, message, fire time, and time remaining.
+- **`kim remove <index|msg> -o` / `--oneshot`** — cancels a pending one-shot by its list index (from `kim list -o`) or message substring, instead of removing a config reminder.
+
+### Removed
+- `kim remind --list` and `kim remind --cancel` flags removed in favour of the cleaner `kim list -o` / `kim remove -o` interface.
+
 ## [4.1.4] - 2026-04-05
 
 ### Added

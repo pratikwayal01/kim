@@ -64,6 +64,9 @@ def cmd_edit(args):
 
 
 def cmd_list(args):
+    import time as _time
+    import datetime as _dt
+
     config = load_config()
     reminders = config.get("reminders", [])
     print(f"{'NAME':<20} {'INTERVAL':>12}   {'URGENCY':<10} {'ENABLED'}")
@@ -78,6 +81,42 @@ def cmd_list(args):
         print(
             f"{r['name']:<20} {interval_str:>12}   {r.get('urgency', 'normal'):<10} {enabled}"
         )
+
+    if getattr(args, "oneshots", False):
+        from ..core import ONESHOT_FILE
+
+        oneshots = []
+        if ONESHOT_FILE.exists():
+            try:
+                import json as _json
+
+                oneshots = _json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                oneshots = []
+        now = _time.time()
+        pending = sorted(
+            [o for o in oneshots if o.get("fire_at", 0) > now],
+            key=lambda o: o["fire_at"],
+        )
+        print()
+        if not pending:
+            print("One-shots: none pending")
+        else:
+            print(f"{'#':<4} {'MESSAGE':<30} {'FIRES AT':<20} {'IN'}")
+            print("-" * 70)
+            for i, o in enumerate(pending, 1):
+                msg = o.get("message", "")[:28]
+                fire_dt = _dt.datetime.fromtimestamp(o["fire_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                remaining = int(o["fire_at"] - now)
+                parts = []
+                for unit, label in [(3600, "h"), (60, "m"), (1, "s")]:
+                    if remaining >= unit:
+                        parts.append(f"{remaining // unit}{label}")
+                        remaining %= unit
+                eta = " ".join(parts) if parts else "now"
+                print(f"{i:<4} {msg:<30} {fire_dt:<20} {eta}")
 
 
 def cmd_logs(args):
