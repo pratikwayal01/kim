@@ -675,14 +675,16 @@ def cmd_uninstall(args):
             cmds.append(f'del /f /q "{p}"')
         deferred_cmd = "ping -n 3 127.0.0.1 >nul & " + " & ".join(cmds)
         try:
+            # Pass as a single string so cmd.exe parses the & operators itself.
+            # CREATE_NO_WINDOW (0x08000000) keeps it invisible.
             subprocess.Popen(
-                ["cmd", "/c", deferred_cmd],
+                f'cmd /c "{deferred_cmd}"',
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
                 close_fds=True,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                shell=False,
+                shell=True,
             )
         except Exception:
             pass  # non-fatal
