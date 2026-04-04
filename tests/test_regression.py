@@ -1878,20 +1878,17 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # selfupdate.py — cmd_uninstall kills orphaned _remind-fire processes (v4.1.9)
 #
-# Bug: 'kim remind' spawns background python subprocesses (via cmd /c kim
-#      _remind-fire) that sleep until their timer fires.  If the daemon is
-#      stopped while they are sleeping, they remain alive holding kim.log open.
-#      The deferred PS script cannot delete kim.log because these orphans still
-#      hold the file handle — uninstall leaves ~/.kim/kim.log behind.
-#      Linux/macOS are unaffected; this is a Windows-only file-locking issue.
-# Fix: the deferred PowerShell script uses Get-WmiObject to find and
-#      Stop-Process any process whose CommandLine contains '_remind-fire',
-#      before the Start-Sleep and kim.log deletion steps.
+# Bug: 'kim remind' spawns background subprocesses that sleep until their
+#      timer fires.  If the daemon stopped while they were sleeping they stay
+#      alive, holding kim.log open.  This blocks the deferred PS rmdir.
+# Fix: synchronously kill all _remind-fire processes in Python (before the
+#      log handle close), using PowerShell Stop-Process on Windows and
+#      pkill on Linux/macOS.  Reduces the deferred Start-Sleep back to 3s.
 # ---------------------------------------------------------------------------
 
 
 class TestUninstallKillsOrphanRemindFire(unittest.TestCase):
-    """Deferred PS script must kill orphaned _remind-fire subprocesses on Windows."""
+    """cmd_uninstall must synchronously kill orphaned _remind-fire subprocesses."""
 
     def _get_uninstall_src(self):
         import inspect
@@ -1899,13 +1896,58 @@ class TestUninstallKillsOrphanRemindFire(unittest.TestCase):
 
         return inspect.getsource(selfupdate.cmd_uninstall)
 
-    def test_remind_fire_pattern_in_ps_script(self):
-        """The deferred PS script must search for _remind-fire processes."""
+    def test_remind_fire_killed_in_python(self):
+        """cmd_uninstall must synchronously kill _remind-fire processes."""
         src = self._get_uninstall_src()
         self.assertIn(
             "_remind-fire",
             src,
-            "Deferred PS script must kill orphaned _remind-fire subprocesses",
+            "cmd_uninstall must kill orphaned _remind-fire subprocesses",
+        )
+
+    def test_windows_uses_stop_process(self):
+        """On Windows, Stop-Process (PowerShell) must be used."""
+        src = self._get_uninstall_src()
+        self.assertIn("Stop-Process", src)
+        self.assertIn("Win32_Process", src)
+
+    def test_unix_uses_pkill(self):
+        """On Unix, pkill must be used."""
+        src = self._get_uninstall_src()
+        self.assertIn("pkill", src)
+
+    def test_orphan_kill_before_log_handle_close(self):
+        """Orphan kill must appear before the log handle close block."""
+        src = self._get_uninstall_src()
+        orphan_pos = src.find("_remind-fire")
+        log_close_pos = src.find("Release all log file handles")
+        self.assertGreater(orphan_pos, 0, "_remind-fire not found")
+        self.assertGreater(log_close_pos, 0, "log handle close block not found")
+        self.assertLess(
+            orphan_pos,
+            log_close_pos,
+            "Orphan kill must happen before log handle close",
+        )
+
+    def test_deferred_ps_does_not_kill_orphans(self):
+        """Orphan kill is done synchronously in Python; the deferred PS script
+        must NOT contain a separate Win32_Process kill (that's the old approach)."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate.cmd_uninstall)
+        # The Win32_Process / Stop-Process call must appear in the Python block,
+        # not inside the ps_lines list that is passed to the deferred PS subprocess.
+        # We verify this by checking that 'ps_lines' does not contain Win32_Process.
+        # Find the ps_lines block start and confirm Win32_Process is before it.
+        ps_lines_pos = src.find("ps_lines = ")
+        win32_pos = src.find("Win32_Process")
+        self.assertGreater(ps_lines_pos, 0)
+        self.assertGreater(win32_pos, 0)
+        self.assertLess(
+            win32_pos,
+            ps_lines_pos,
+            "Win32_Process must be in the Python block, not inside ps_lines",
         )
 
     def test_stop_process_used_to_terminate(self):
@@ -1924,50 +1966,6 @@ class TestUninstallKillsOrphanRemindFire(unittest.TestCase):
             "Win32_Process",
             src,
             "Deferred PS script must use Win32_Process to find by CommandLine",
-        )
-
-    def test_orphan_kill_before_start_sleep(self):
-        """Orphan kill must be the first step in ps_lines, before Start-Sleep."""
-        src = self._get_uninstall_src()
-        remind_fire_pos = src.find("_remind-fire")
-        start_sleep_pos = src.find("Start-Sleep 5")
-        self.assertGreater(remind_fire_pos, 0, "_remind-fire not found")
-        self.assertGreater(start_sleep_pos, 0, "Start-Sleep 5 not found")
-        self.assertLess(
-            remind_fire_pos,
-            start_sleep_pos,
-            "Orphan kill must appear before Start-Sleep in the PS script",
-        )
-
-    def test_stop_process_used_to_terminate(self):
-        """The deferred PS script must use Stop-Process to kill orphans."""
-        src = self._get_uninstall_src()
-        self.assertIn(
-            "Stop-Process",
-            src,
-            "Deferred PS script must use Stop-Process to kill orphaned processes",
-        )
-
-    def test_wmi_used_to_find_by_commandline(self):
-        """The deferred PS script must use WMI to find processes by CommandLine."""
-        src = self._get_uninstall_src()
-        self.assertIn(
-            "Win32_Process",
-            src,
-            "Deferred PS script must use Win32_Process to find by CommandLine",
-        )
-
-    def test_orphan_kill_before_start_sleep(self):
-        """Orphan kill must be the first step in ps_lines, before Start-Sleep."""
-        src = self._get_uninstall_src()
-        remind_fire_pos = src.find("_remind-fire")
-        start_sleep_pos = src.find("Start-Sleep 5")
-        self.assertGreater(remind_fire_pos, 0, "_remind-fire not found")
-        self.assertGreater(start_sleep_pos, 0, "Start-Sleep 5 not found")
-        self.assertLess(
-            remind_fire_pos,
-            start_sleep_pos,
-            "Orphan kill must appear before Start-Sleep in the PS script",
         )
 
 
