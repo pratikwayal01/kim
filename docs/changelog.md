@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-04-05
+
+### Added
+- **`--every` flag** — alias for `-I`/`--interval` on `kim add` and `kim update` (e.g. `kim add "drink water" --every 30m`)
+- **`--at HH:MM` on `kim add`/`kim update`** — schedule a reminder to fire every day at a fixed time (e.g. `kim add standup --at 10:00`). Mutually exclusive with `--interval`.
+- **`--tz TZ` flag** — IANA timezone override for `--at` and `kim remind ... at` (e.g. `--tz Asia/Kolkata`). Defaults to local system timezone.
+- **`kim remind ... at <datetime>`** — fire a one-shot reminder at an absolute datetime. Accepts natural language and ISO formats:
+  - `at 14:30` — today at 14:30 (or tomorrow if already past)
+  - `at tomorrow 10am` — tomorrow at 10:00
+  - `at friday 9am` — next Friday at 09:00
+  - `at 2026-04-06 09:00` — specific date and time
+- **`parse_datetime` utility** — pure stdlib datetime parser in `core.py` supporting both relative (`in 10m`, `2h 30m`) and absolute (`at tomorrow 9am`) formats
+- **`parse_at_time` utility** — validates and normalises `--at HH:MM` values
+- **Scheduler support for daily at-time reminders** — `KimScheduler` now handles reminders with an `at` field; re-schedules them for the same wall-clock time the next day after firing
+- **Live config reload** — `kim add`, `kim remove`, `kim enable`, `kim disable`, and `kim update` now take effect in the running daemon within 1 second — no restart needed. Implemented via a `~/.kim/kim.reload` flag file polled by the daemon loop. On Linux/macOS, `kill -HUP <pid>` also triggers a reload.
+
+### Changed
+- **`kim start` no longer blocks the terminal** — when run interactively it spawns a detached background process and returns immediately. Process supervisors (systemd, launchd, Windows Task Scheduler) are detected automatically and still run in-process.
+- **`kim start` output** — shows `kim started. (PID 1234)` on fresh start; shows `kim is already running. (PID 1234)` if the daemon is already up.
+- **`kim stop` output** — shows `kim stopped. (PID 1234)` on success; shows `kim is already stopped.` if not running.
+- **`kim status` running line** — now shows `● kim running  (PID 1234)` for consistency with start/stop output.
+- `kim remind` time-parsing refactored to use `parse_datetime` (behaviour-compatible for existing relative syntax)
+
 ## [4.0.0] - 2026-04-02
 
 ### Added

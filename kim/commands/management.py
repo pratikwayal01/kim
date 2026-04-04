@@ -7,7 +7,15 @@ import os
 import platform
 import sys
 
-from ..core import CONFIG, load_config, log
+from ..core import (
+    CONFIG,
+    KIM_DIR,
+    PID_FILE,
+    RELOAD_FILE,
+    load_config,
+    log,
+    parse_at_time,
+)
 from ..utils import CHECK
 
 # CREATE_NO_WINDOW flag used when spawning subprocesses on Windows
@@ -34,24 +42,56 @@ def _save_config(config: dict) -> None:
         sys.exit(1)
 
 
+def _signal_reload() -> None:
+    """Touch the reload flag file so the running daemon picks up config changes."""
+    if PID_FILE.exists():
+        try:
+            RELOAD_FILE.touch()
+        except OSError:
+            pass
+
+
 def cmd_add(args):
     config = load_config()
     name = args.name
-    interval_str = args.interval
 
     for r in config.get("reminders", []):
         if r.get("name") == name:
             print(f"Reminder '{name}' already exists. Use 'kim update' to modify it.")
             sys.exit(1)
 
-    new_reminder = {
-        "name": name,
-        "interval": interval_str,
-        "title": args.title or f"Reminder: {name}",
-        "message": args.message or "Time for a reminder!",
-        "urgency": args.urgency,
-        "enabled": True,
-    }
+    # Resolve interval vs --at
+    at_time = getattr(args, "at_time", None)
+    interval_str = getattr(args, "interval", None)
+    tz_name = getattr(args, "timezone", None)
+
+    if at_time:
+        try:
+            at_time = parse_at_time(at_time, tz_name)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        new_reminder = {
+            "name": name,
+            "at": at_time,
+            "title": args.title or f"Reminder: {name}",
+            "message": args.message or "Time for a reminder!",
+            "urgency": args.urgency,
+            "enabled": True,
+        }
+        if tz_name:
+            new_reminder["timezone"] = tz_name
+        schedule_desc = f"daily at {at_time}"
+    else:
+        new_reminder = {
+            "name": name,
+            "interval": interval_str,
+            "title": args.title or f"Reminder: {name}",
+            "message": args.message or "Time for a reminder!",
+            "urgency": args.urgency,
+            "enabled": True,
+        }
+        schedule_desc = f"every {interval_str}"
 
     if args.sound_file:
         new_reminder["sound_file"] = args.sound_file
@@ -66,8 +106,9 @@ def cmd_add(args):
 
     config.setdefault("reminders", []).append(new_reminder)
     _save_config(config)
+    _signal_reload()
 
-    print(f"{CHECK} Added reminder '{name}' (every {interval_str})")
+    print(f"{CHECK} Added reminder '{name}' ({schedule_desc})")
     log.info("Added reminder: %s", name)
 
 
@@ -84,6 +125,7 @@ def cmd_remove(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Removed reminder '{name}'")
     log.info("Removed reminder: %s", name)
 
@@ -104,6 +146,7 @@ def cmd_enable(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Enabled reminder '{name}'")
     log.info("Enabled reminder: %s", name)
 
@@ -124,6 +167,7 @@ def cmd_disable(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Disabled reminder '{name}'")
     log.info("Disabled reminder: %s", name)
 
@@ -136,7 +180,24 @@ def cmd_update(args):
     for r in config.get("reminders", []):
         if r.get("name") == name:
             found = True
-            if args.interval is not None:
+            at_time = getattr(args, "at_time", None)
+            tz_name = getattr(args, "timezone", None)
+            if at_time:
+                try:
+                    at_time = parse_at_time(at_time, tz_name)
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    sys.exit(1)
+                # Switch from interval to at-time schedule
+                r.pop("interval", None)
+                r.pop("interval_minutes", None)
+                r["at"] = at_time
+                if tz_name:
+                    r["timezone"] = tz_name
+            elif args.interval is not None:
+                # Switch from at-time to interval schedule
+                r.pop("at", None)
+                r.pop("timezone", None)
                 r["interval"] = args.interval
             if args.title is not None:
                 r["title"] = args.title
@@ -155,5 +216,6 @@ def cmd_update(args):
         sys.exit(1)
 
     _save_config(config)
+    _signal_reload()
     print(f"{CHECK} Updated reminder '{name}'")
     log.info("Updated reminder: %s", name)

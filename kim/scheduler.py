@@ -2,7 +2,9 @@
 Heapq-based single-thread scheduler for kim.
 """
 
+import datetime
 import heapq
+import re
 import threading
 import time
 from copy import deepcopy
@@ -96,15 +98,71 @@ class KimScheduler:
         for reminder in config.get("reminders", []):
             if not reminder.get("enabled", True):
                 continue
-            interval = self._parse_interval(reminder)
-            if interval is None:
-                log.warning(
-                    "Skipping reminder %r — invalid interval", reminder.get("name")
-                )
-                continue
-            event = _Event(fire_at=now + interval, reminder=deepcopy(reminder))
+
+            if reminder.get("at"):
+                fire_at = self._next_at_fire(reminder)
+                if fire_at is None:
+                    log.warning(
+                        "Skipping reminder %r — invalid 'at' value",
+                        reminder.get("name"),
+                    )
+                    continue
+            else:
+                interval = self._parse_interval(reminder)
+                if interval is None:
+                    log.warning(
+                        "Skipping reminder %r — invalid interval", reminder.get("name")
+                    )
+                    continue
+                fire_at = now + interval
+
+            event = _Event(fire_at=fire_at, reminder=deepcopy(reminder))
             self._live[reminder["name"]] = event
             heapq.heappush(self._heap, event)
+
+    @staticmethod
+    def _next_at_fire(reminder: dict) -> Optional[float]:
+        """
+        For reminders with an 'at' field (HH:MM daily schedule), compute the
+        Unix timestamp of the next occurrence.
+
+        'at' field is "HH:MM" (24h).
+        Optional 'timezone' field is an IANA tz name; defaults to local time.
+        Returns None if the 'at' value is invalid.
+        """
+        at_str = reminder.get("at")
+        if not at_str:
+            return None
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})", at_str.strip())
+        if not m:
+            log.warning(
+                "Invalid 'at' value for reminder %r: %r", reminder.get("name"), at_str
+            )
+            return None
+        hour, minute = int(m.group(1)), int(m.group(2))
+
+        tz_name = reminder.get("timezone")
+        try:
+            if tz_name:
+                from .core import _get_utc_offset
+
+                tz = _get_utc_offset(tz_name)
+            else:
+                tz = datetime.datetime.now().astimezone().tzinfo
+        except Exception as e:
+            log.warning(
+                "Could not resolve timezone %r for reminder %r: %s",
+                tz_name,
+                reminder.get("name"),
+                e,
+            )
+            tz = datetime.datetime.now().astimezone().tzinfo
+
+        now = datetime.datetime.now(tz=tz)
+        candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= now:
+            candidate += datetime.timedelta(days=1)
+        return candidate.timestamp()
 
     @staticmethod
     def _parse_interval(reminder: dict) -> Optional[float]:
@@ -169,9 +227,16 @@ class KimScheduler:
         If a reminder with the same name already exists it is replaced.
         """
         name = reminder["name"]
-        interval = self._parse_interval(reminder)
-        if interval is None:
-            raise ValueError(f"Invalid interval for reminder {name!r}")
+
+        if reminder.get("at"):
+            fire_at = self._next_at_fire(reminder)
+            if fire_at is None:
+                raise ValueError(f"Invalid 'at' value for reminder {name!r}")
+        else:
+            interval = self._parse_interval(reminder)
+            if interval is None:
+                raise ValueError(f"Invalid interval for reminder {name!r}")
+            fire_at = time.time() + interval
 
         with self._lock:
             # Cancel any existing event for this name
@@ -179,14 +244,14 @@ class KimScheduler:
                 self._live[name].cancelled = True
 
             event = _Event(
-                fire_at=time.time() + interval,
+                fire_at=fire_at,
                 reminder=deepcopy(reminder),
             )
             self._live[name] = event
             heapq.heappush(self._heap, event)
 
         self._wakeup.set()  # wake scheduler to re-evaluate next fire time
-        log.info("Added reminder %r (interval %ss)", name, interval)
+        log.info("Added reminder %r (fire_at=%s)", name, time.ctime(fire_at))
 
     def remove_reminder(self, name: str) -> bool:
         """
@@ -339,14 +404,18 @@ class KimScheduler:
                 )
                 continue
 
-            # Re-schedule this reminder for its next interval, anchored to
-            # now (time of actual firing) rather than the stale fire_at.
-            # Using fire_at + interval would cause immediate re-firing if
-            # the notifier was slow or the system was asleep.
-            interval = self._parse_interval(event.reminder)
-            if interval:
+            # Re-schedule for next occurrence
+            if event.reminder.get("at"):
+                # Daily at-time: fire again at the same HH:MM tomorrow
+                next_fire = self._next_at_fire(event.reminder)
+            else:
+                # Interval: anchor to now to avoid drift
+                interval = self._parse_interval(event.reminder)
+                next_fire = (now + interval) if interval else None
+
+            if next_fire:
                 next_event = _Event(
-                    fire_at=now + interval,
+                    fire_at=next_fire,
                     reminder=deepcopy(event.reminder),
                 )
                 with self._lock:

@@ -12,7 +12,16 @@ import sys
 import time
 from pathlib import Path
 
-from ..core import CONFIG, KIM_DIR, LOG_FILE, ONESHOT_FILE, VERSION, load_config, log
+from ..core import (
+    CONFIG,
+    KIM_DIR,
+    LOG_FILE,
+    ONESHOT_FILE,
+    VERSION,
+    load_config,
+    log,
+    parse_datetime,
+)
 from ..notifications import notify
 from ..sound import SOUND_FORMAT_NOTES, play_sound_file, validate_sound_file
 from ..utils import CHECK, CROSS, EM_DASH, ALARM, PLAY, BELL
@@ -35,27 +44,16 @@ def _save_config(config: dict) -> None:
 
 
 def cmd_remind(args):
-    raw = " ".join(args.time)
-    raw = raw.strip().lower().removeprefix("in").strip()
-
-    total_seconds = 0
-    for match in re.finditer(r"(\d+)\s*(d|h|m|s)", raw):
-        value, unit = int(match.group(1)), match.group(2)
-        total_seconds += {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit] * value
-
-    if total_seconds == 0:
-        try:
-            fallback = float(raw) * 60
-            if fallback > 0:
-                total_seconds = fallback
-        except (ValueError, TypeError):
-            pass
-
-    if total_seconds <= 0:
-        print("Couldn't parse time. Examples: 'in 10m', 'in 1h', 'in 2h 30m', 'in 90s'")
+    tz_name = getattr(args, "timezone", None)
+    try:
+        fire_time = parse_datetime(args.time, tz_name=tz_name)
+    except ValueError as e:
+        print(f"Error: {e}")
         sys.exit(1)
 
-    if total_seconds > 365 * 24 * 3600:
+    sleep_seconds = fire_time - time.time()
+
+    if sleep_seconds > 365 * 24 * 3600:
         print("Duration too large (max 365 days).")
         sys.exit(1)
 
@@ -63,21 +61,28 @@ def cmd_remind(args):
     title = args.title or (
         "Reminder" if platform.system() == "Windows" else f"{ALARM} Reminder"
     )
-    sleep_seconds = total_seconds
 
+    # Human-readable display
+    remaining = int(sleep_seconds)
     parts = []
-    remaining = total_seconds
     for unit, label in [(3600, "h"), (60, "m"), (1, "s")]:
         if remaining >= unit:
             parts.append(f"{remaining // unit}{label}")
             remaining %= unit
-    display = " ".join(parts)
+    display = " ".join(parts) if parts else "now"
 
-    print(f"{title} set: '{message}' in {display}")
+    # For absolute "at" times, also show the wall-clock time
+    raw_joined = " ".join(args.time).strip().lower()
+    if raw_joined.startswith("at"):
+        import datetime as _dt
+
+        fire_dt = _dt.datetime.fromtimestamp(fire_time).strftime("%Y-%m-%d %H:%M")
+        print(f"{title} set: '{message}' at {fire_dt} (in {display})")
+    else:
+        print(f"{title} set: '{message}' in {display}")
     log.info("One-shot reminder set: '%s' in %s", message, display)
 
     # Save one-shot reminder for persistence across reboots
-    fire_time = time.time() + sleep_seconds
     oneshot = {
         "message": message,
         "title": title,

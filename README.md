@@ -5,6 +5,8 @@
 
 **Documentation:** [https://pratikwayal01.github.io/kim/](https://pratikwayal01.github.io/kim/)
 
+![kim demo](assets/demo.gif)
+
 ---
 
 ## Install
@@ -43,7 +45,7 @@ kim remove         Remove a reminder
 kim enable         Enable a reminder
 kim disable        Disable a reminder
 kim update         Update a reminder
-kim remind         Fire a one-shot reminder after a delay
+kim remind         Fire a one-shot reminder after a delay or at a time
 kim interactive    Enter interactive mode (-i)
 kim self-update    Check for and install updates
 kim uninstall      Uninstall kim completely
@@ -59,13 +61,35 @@ kim sound --test                   # play it immediately
 kim sound --enable / --disable     # toggle sound on/off
 ```
 
+### Interval reminders
+
+```bash
+kim add "drink water" -I 30m          # every 30 minutes
+kim add "drink water" --every 30m     # same — --every is an alias for -I
+kim add "stretch" --every 1h
+```
+
+### Daily at a fixed time
+
+```bash
+kim add standup --at 10:00                        # every day at 10:00 local time
+kim add standup --at 10:00 --tz Asia/Kolkata      # with explicit timezone
+```
+
 ### One-shot reminders
 
 ```bash
+# Relative
 kim remind "standup call" in 10m
 kim remind "take a break" in 1h
 kim remind "check the oven" in 25m
 kim remind "deploy window opens" in 2h 30m
+
+# Absolute — fire at a specific time
+kim remind "standup" at 10:00
+kim remind "standup" at tomorrow 9am
+kim remind "call" at friday 2pm
+kim remind "deploy" at 2026-04-07 14:30 --tz America/New_York
 ```
 
 Fires once, runs in the background, frees your terminal immediately.

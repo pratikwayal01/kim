@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..core import CONFIG, KIM_DIR, PID_FILE, VERSION, load_config, log
+from ..core import CONFIG, KIM_DIR, PID_FILE, RELOAD_FILE, VERSION, load_config, log
 from ..notifications import notify
 from ..sound import validate_sound_file
 from ..scheduler import KimScheduler
@@ -21,20 +21,122 @@ from ..utils import BULLET, EM_DASH, WARNING, CIRCLE_OPEN, CIRCLE_FILLED, CHECK
 from .misc import load_oneshot_reminders, remove_oneshot
 
 
+def _is_supervised() -> bool:
+    """
+    Return True when kim is being launched by a process supervisor
+    (systemd, launchd, Windows Task Scheduler) rather than interactively
+    by the user.  In supervised mode cmd_start blocks in-process; in
+    interactive mode it re-spawns itself detached so the terminal is freed.
+    """
+    # systemd sets INVOCATION_ID for every unit it starts
+    if os.environ.get("INVOCATION_ID"):
+        return True
+    # launchd sets LAUNCH_DAEMON_NAME or __CF_USER_TEXT_ENCODING and the
+    # parent is launchd (PID 1 on macOS)
+    if os.environ.get("LAUNCH_DAEMON_NAME") or os.environ.get(
+        "__CF_USER_TEXT_ENCODING"
+    ):
+        if os.getppid() == 1:
+            return True
+    # Windows Task Scheduler child processes have no console (SESSIONNAME is
+    # absent or "Services") and parent is svchost
+    if platform.system() == "Windows":
+        session = os.environ.get("SESSIONNAME", "")
+        if session == "" or session.lower() == "services":
+            return True
+    # Caller can force supervised mode explicitly (used by the detached child)
+    if os.environ.get("KIM_DAEMON") == "1":
+        return True
+    return False
+
+
+def _spawn_detached() -> int:
+    """
+    Re-launch this same kim process detached from the terminal.
+    Returns the PID of the new background process.
+    """
+    env = os.environ.copy()
+    env["KIM_DAEMON"] = "1"
+
+    if platform.system() == "Windows":
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        proc = subprocess.Popen(
+            sys.argv,
+            env=env,
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        proc = subprocess.Popen(
+            sys.argv,
+            env=env,
+            start_new_session=True,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return proc.pid
+
+
+def _reload_config(scheduler: KimScheduler, current_config: dict) -> dict:
+    """
+    Re-read config.json and reconcile the live scheduler without a restart.
+    - New or updated enabled reminders  → scheduler.add_reminder()
+    - Disabled reminders                → scheduler.remove_reminder()
+    - Deleted reminders                 → scheduler.remove_reminder()
+    Returns the newly loaded config so the caller can replace its reference.
+    """
+    new_config = load_config()
+    old = {r["name"]: r for r in current_config.get("reminders", [])}
+    new = {r["name"]: r for r in new_config.get("reminders", [])}
+
+    for name, r in new.items():
+        if r.get("enabled", True):
+            scheduler.add_reminder(r)  # add new / update changed
+        else:
+            scheduler.remove_reminder(name)  # disabled → cancel from heap
+
+    for name in old:
+        if name not in new:
+            scheduler.remove_reminder(name)  # deleted → cancel from heap
+
+    active = sum(1 for r in new.values() if r.get("enabled", True))
+    log.info("Config reloaded — %d active reminder(s)", active)
+    return new_config
+
+
 def cmd_start(args):
     if PID_FILE.exists():
         try:
             pid_str = PID_FILE.read_text(encoding="utf-8").strip()
             pid = int(pid_str)
             if _is_process_running(pid):
-                print(f"kim is already running (PID {pid}). Use 'kim stop' first.")
-                sys.exit(1)
+                print(f"kim is already running. (PID {pid})")
+                sys.exit(0)
             else:
                 log.info("Removing stale PID file (PID %s not running)", pid)
                 PID_FILE.unlink(missing_ok=True)
         except (OSError, UnicodeDecodeError, ValueError) as e:
             log.warning("Could not read PID file: %s. Removing.", e)
             PID_FILE.unlink(missing_ok=True)
+
+    # When run interactively (not by a supervisor), re-spawn detached so the
+    # terminal is not blocked, then return immediately.
+    if not _is_supervised():
+        _spawn_detached()
+        # Brief wait so the child can write its PID file before we exit
+        time.sleep(0.8)
+        try:
+            pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+            print(f"kim started. (PID {pid})")
+        except Exception:
+            print("kim started.")
+        sys.exit(0)
 
     config = load_config()
     global_sound = config.get("sound", True)
@@ -130,12 +232,18 @@ def cmd_start(args):
         PID_FILE.unlink(missing_ok=True)
         sys.exit(0)
 
-    # SIGTERM can be delivered on Unix; on Windows it cannot be sent from
-    # another process (os.kill raises WinError 87), so only register it
-    # where it actually works.  SIGINT (Ctrl-C) works on both platforms.
+    # SIGTERM / SIGINT for graceful shutdown
     if platform.system() != "Windows":
         signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
+
+    # SIGHUP triggers a live config reload on Unix (kill -HUP <pid>)
+    if platform.system() != "Windows":
+
+        def _sighup(sig, frame):
+            RELOAD_FILE.touch()
+
+        signal.signal(signal.SIGHUP, _sighup)
 
     try:
         notify(
@@ -169,6 +277,12 @@ def cmd_start(args):
     try:
         while True:
             time.sleep(1)
+            if RELOAD_FILE.exists():
+                try:
+                    RELOAD_FILE.unlink(missing_ok=True)
+                    config = _reload_config(scheduler, config)
+                except Exception:
+                    log.exception("Config reload failed")
     except KeyboardInterrupt:
         shutdown(None, None)
 
@@ -209,7 +323,7 @@ def _terminate_process(pid: int) -> None:
 
 def cmd_stop(args):
     if not PID_FILE.exists():
-        print("kim is not running.")
+        print("kim is already stopped.")
         sys.exit(0)
     try:
         pid = int(PID_FILE.read_text(encoding="utf-8").strip())
@@ -222,10 +336,10 @@ def cmd_stop(args):
         # On Windows the process is killed before its cleanup handler runs,
         # so we always remove the PID file here on all platforms.
         PID_FILE.unlink(missing_ok=True)
-        print(f"kim stopped (PID {pid}).")
+        print(f"kim stopped. (PID {pid})")
         log.info("Stopped by user (PID %d)", pid)
     except ProcessLookupError:
-        print("Process not found — cleaning up stale PID file.")
+        print(f"kim stopped. (PID {pid})")
         PID_FILE.unlink(missing_ok=True)
     except PermissionError:
         print(f"Permission denied to stop PID {pid}.")
@@ -266,13 +380,13 @@ def cmd_status(args):
             pid_str = PID_FILE.read_text(encoding="utf-8").strip()
             pid = int(pid_str)
             if _is_process_running(pid):
-                print(f"{CIRCLE_FILLED} kim running   PID {pid}")
+                print(f"{CIRCLE_FILLED} kim running  (PID {pid})")
             else:
                 PID_FILE.unlink(missing_ok=True)
-                print(f"{CIRCLE_OPEN} kim stopped  (removed stale PID file)")
+                print(f"{CIRCLE_OPEN} kim stopped  (stale PID {pid} removed)")
         except (OSError, UnicodeDecodeError, ValueError) as e:
             PID_FILE.unlink(missing_ok=True)
-            print(f"{CIRCLE_OPEN} kim stopped  (removed invalid PID file)")
+            print(f"{CIRCLE_OPEN} kim stopped  (invalid PID file removed)")
     else:
         print(f"{CIRCLE_OPEN} kim stopped")
 
