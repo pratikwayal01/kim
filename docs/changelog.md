@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-04-05
+
+### Fixed
+- **Windows script install: `kim start` crash (WinError 193)** — `_spawn_detached()` was calling `Popen(sys.argv)` which fails when `sys.argv[0]` is a `.py` file (script install via `install.ps1`). Now prepends `sys.executable` when argv[0] ends in `.py` on Windows.
+
 ## [4.1.2] - 2026-04-05
 
 ### Fixed

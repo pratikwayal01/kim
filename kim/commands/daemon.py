@@ -58,11 +58,21 @@ def _spawn_detached() -> int:
     env = os.environ.copy()
     env["KIM_DAEMON"] = "1"
 
+    # Build the command to re-invoke kim.
+    # sys.argv[0] may be a .py script (script install), a .exe (pip/binary),
+    # or a console_scripts wrapper.  On Windows, Popen cannot exec a .py file
+    # directly — it must be run via the Python interpreter.
+    argv0 = sys.argv[0]
+    if platform.system() == "Windows" and argv0.lower().endswith(".py"):
+        cmd = [sys.executable] + sys.argv
+    else:
+        cmd = sys.argv
+
     if platform.system() == "Windows":
         DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         proc = subprocess.Popen(
-            sys.argv,
+            cmd,
             env=env,
             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
             close_fds=True,
@@ -72,7 +82,7 @@ def _spawn_detached() -> int:
         )
     else:
         proc = subprocess.Popen(
-            sys.argv,
+            cmd,
             env=env,
             start_new_session=True,
             close_fds=True,
