@@ -560,9 +560,14 @@ def cmd_uninstall(args):
             print("No scheduled task found (or already removed).")
 
     # --- Release all log file handles before touching KIM_DIR ----------------
-    # logging.shutdown() alone is not enough on Windows — the RotatingFileHandler
-    # keeps the file open.  The kim handler lives on the "kim" named logger
-    # (not the root logger), so we must close both.
+    # On Windows, RotatingFileHandler keeps kim.log open for the lifetime of
+    # the process.  We must:
+    #   1. Close and remove handlers from the "kim" named logger (where they live)
+    #   2. Close and remove handlers from the root logger (belt-and-suspenders)
+    #   3. Null out the module-level _handler reference in kim.core so the
+    #      object can be garbage-collected — on Windows the file lock is not
+    #      released until the file descriptor is actually closed AND the object
+    #      is collected (no more references).
     for logger_name in ("kim", ""):
         _lg = logging.getLogger(logger_name)
         for handler in _lg.handlers[:]:
@@ -572,6 +577,21 @@ def cmd_uninstall(args):
                 pass
             _lg.removeHandler(handler)
     logging.shutdown()
+    # Kill the module-level reference so CPython GC can release the fd.
+    try:
+        import kim.core as _core
+
+        if hasattr(_core, "_handler"):
+            try:
+                _core._handler.close()
+            except Exception:
+                pass
+            _core._handler = None
+    except Exception:
+        pass
+    import gc
+
+    gc.collect()
     # --------------------------------------------------------------------------
 
     binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
