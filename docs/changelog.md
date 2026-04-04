@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.7] - 2026-04-05
+
+### Added
+- **Interactive mode: List/Add/Remove One-shots** — three new menu items in `kim interactive` for managing one-shot reminders without touching the CLI.
+- **Interactive mode: `--at HH:MM` schedule** — "Add Reminder" now prompts for interval or daily-at schedule type.
+- **Status bar one-shot count** — interactive header shows `One-shots: N pending` alongside the reminder count.
+- **Config auto-reload after every action** — interactive mode reloads config from disk after each mutation so the display is always current.
+
+### Fixed
+- **`kim` help output cleanup** — removed duplicate positional-args block, replaced long `{start,stop,...}` metavar with `<command>`, suppressed internal `_remind-fire` subcommand from help, removed redundant "Short flags" section, and tightened epilog formatting.
+- **Interactive daemon signal on mutations** — all mutating actions (`add`, `edit`, `toggle`, `remove`) now call `_signal_reload()` so the running daemon picks up changes immediately.
+
 ## [4.1.6] - 2026-04-05
 
 ### Fixed

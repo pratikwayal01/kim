@@ -104,25 +104,42 @@ from .selfupdate import cmd_selfupdate, cmd_uninstall
 def main():
     _ensure_path_windows()  # add Scripts dir to PATH on first run if missing
     _enable_windows_ansi()  # enable ANSI colour codes on Windows for all commands
+
+    class _Formatter(argparse.RawDescriptionHelpFormatter):
+        """Hide the {cmd1,cmd2,...} metavar; keep the subcommand table in epilog."""
+
+        def _format_actions_usage(self, actions, groups):
+            text = super()._format_actions_usage(actions, groups)
+            import re
+
+            # Replace the long {start,stop,...} metavar with a short placeholder
+            text = re.sub(r"\{[a-z,_-]{10,}\}", "<command>", text)
+            return text
+
+        def _format_action(self, action):
+            # Suppress the positional subcommand list (we have the epilog table)
+            if action.nargs == argparse.PARSER:
+                return ""
+            return super()._format_action(action)
+
     parser = argparse.ArgumentParser(
         prog="kim",
         description="keep in mind — lightweight reminder daemon",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-commands:
+        formatter_class=_Formatter,
+        epilog="""commands:
   start       Start the daemon
   stop        Stop the daemon
   status      Show status and active reminders
-  list        List all reminders from config
+  list [-o]   List reminders  (-o also shows pending one-shots)
   logs        Show recent log entries
   edit        Open config in $EDITOR
   add         Add a new reminder
-  remove      Remove a reminder
+  remove      Remove a reminder  (-o to cancel a one-shot)
   enable      Enable a reminder
   disable     Disable a reminder
   update      Update a reminder
   remind      Fire a one-shot reminder after a delay or at a time
-  interactive Enter interactive mode (alias: -i)
+  interactive Enter interactive mode  (alias: -i)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
   export      Export reminders to file
@@ -131,12 +148,8 @@ commands:
   sound       Manage the notification sound file
   completion  Generate shell completions
 
-Short flags:
-  -i          Enter interactive mode
-
 config: ~/.kim/config.json
-logs:   ~/.kim/kim.log
-        """,
+logs:   ~/.kim/kim.log""",
     )
     parser.add_argument("-v", "--version", action="version", version=f"kim {VERSION}")
     sub = parser.add_subparsers(dest="command")
@@ -277,7 +290,7 @@ logs:   ~/.kim/kim.log
         help="Timezone for 'at' datetime (default: local system timezone)",
     )
 
-    fire_p = sub.add_parser("_remind-fire")
+    fire_p = sub.add_parser("_remind-fire", help=argparse.SUPPRESS)
     fire_p.add_argument("--message", required=True)
     fire_p.add_argument("--title", default="\u23f0 Reminder")
     fire_p.add_argument("--seconds", type=float, required=True)
