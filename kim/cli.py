@@ -3,10 +3,77 @@ CLI argument parsing and command dispatch for kim.
 """
 
 import argparse
+import os
 import platform
+import subprocess
 import sys
 
 from .core import VERSION
+
+
+def _ensure_path_windows():
+    """
+    Windows-only: if the Scripts directory that contains this kim entry-point
+    is not on the user PATH, add it with `setx` so future shells find `kim`.
+    Runs silently — any error is swallowed so it never breaks a command.
+    """
+    if platform.system() != "Windows":
+        return
+    try:
+        import sysconfig
+
+        scripts_dir = sysconfig.get_path("scripts", "nt_user")
+        if not scripts_dir:
+            return
+
+        # Read the persistent user PATH from the registry (what setx writes to)
+        result = subprocess.run(
+            [
+                "reg",
+                "query",
+                r"HKCU\Environment",
+                "/v",
+                "PATH",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        user_path = ""
+        for line in result.stdout.splitlines():
+            if "PATH" in line and "REG_" in line:
+                # line looks like: "    PATH    REG_EXPAND_SZ    C:\foo;C:\bar"
+                parts = line.strip().split(None, 2)
+                if len(parts) == 3:
+                    user_path = parts[2]
+                break
+
+        # Normalise separators for comparison
+        dirs_in_path = [p.strip().lower() for p in user_path.split(";") if p.strip()]
+        if scripts_dir.lower() in dirs_in_path:
+            return  # already there
+
+        # Add it permanently via setx (writes to HKCU\Environment)
+        new_path = (
+            user_path.rstrip(";") + ";" + scripts_dir if user_path else scripts_dir
+        )
+        subprocess.run(
+            ["setx", "PATH", new_path],
+            capture_output=True,
+            timeout=10,
+        )
+
+        # Also patch the current process so this session works immediately
+        os.environ["PATH"] = os.environ.get("PATH", "") + ";" + scripts_dir
+
+        print(
+            f"[kim] Added {scripts_dir} to your PATH.\n"
+            "      Open a new terminal window for the change to take effect."
+        )
+    except Exception:
+        pass  # never break the CLI over a PATH fix
+
+
 from .interactive import _enable_windows_ansi, cmd_interactive
 from .commands.daemon import cmd_start, cmd_stop, cmd_status
 from .commands.management import (
@@ -35,6 +102,7 @@ from .selfupdate import cmd_selfupdate, cmd_uninstall
 
 
 def main():
+    _ensure_path_windows()  # add Scripts dir to PATH on first run if missing
     _enable_windows_ansi()  # enable ANSI colour codes on Windows for all commands
     parser = argparse.ArgumentParser(
         prog="kim",

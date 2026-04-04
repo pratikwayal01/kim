@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-04-05
+
+### Fixed
+- **Windows PATH auto-fix** — on Windows, `kim` now detects if the pip Scripts directory is missing from the user `PATH` and adds it automatically via `setx` on first run. Users no longer need to manually update their PATH after `pip install kim-reminder`.
+
 ## [4.1.0] - 2026-04-05
 
 ### Added
