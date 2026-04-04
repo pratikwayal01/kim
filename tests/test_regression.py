@@ -1759,20 +1759,25 @@ class TestUninstallDeferredExe(unittest.TestCase):
             "cmd_uninstall must use a deferred_exe variable for .exe removal",
         )
 
-    def test_exe_not_in_binary_candidates_on_windows(self):
-        """kim.exe must NOT be added to binary_candidates (direct unlink) on Windows."""
+    def test_bat_not_in_binary_candidates_on_windows(self):
+        """Neither kim.bat nor kim.exe must be in binary_candidates on Windows.
+        Both are deferred so they are not deleted while the process is still running."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate.cmd_uninstall)
-        # The hardcoded AppData Programs path must not appear in binary_candidates
-        # list on Windows — it was moved to the deferred block.
-        # We check that the binary_candidates Windows block no longer includes .exe
-        # by verifying the comment says only the bat shim is there.
+        # The Windows branch of binary_candidates must be a no-op (pass).
         self.assertIn(
-            "bat shim",
+            "deferred",
             src,
-            "Windows binary_candidates should only contain the bat shim; .exe is deferred",
+            "Windows binaries must be deferred, not in binary_candidates",
+        )
+        # Confirm kim.bat is never added to binary_candidates directly
+        # (it only appears in deferred_bat paths)
+        self.assertNotIn(
+            'binary_candidates += [\n            Path.home() / ".local" / "bin" / "kim.bat"',
+            src,
+            "kim.bat must not be added to binary_candidates (causes 'batch file cannot be found')",
         )
 
     def test_deferred_files_list_includes_exe(self):

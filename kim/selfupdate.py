@@ -592,10 +592,10 @@ def cmd_uninstall(args):
             Path("/opt/homebrew/bin/kim"),
         ]
     elif system == "Windows":
-        # Only add the non-exe bat shim here; .exe files get deferred deletion below.
-        binary_candidates += [
-            Path.home() / ".local" / "bin" / "kim.bat",
-        ]
+        # On Windows all binaries are deferred (bat shim + exe); nothing goes in
+        # binary_candidates here — direct deletion of kim.bat while cmd.exe is
+        # still executing it causes "The batch file cannot be found." on exit.
+        pass
 
     # On Windows, shutil.which("kim") may resolve to the currently-executing
     # kim.bat.  Deleting it while cmd.exe is running it causes the
@@ -619,8 +619,14 @@ def cmd_uninstall(args):
 
     # Also check the pip Scripts exe directly — it won't appear via which() when
     # the .bat shim is the PATH entry, but it still needs deferred deletion.
+    # Also fall back to the known bat shim path in case which() didn't find it.
     if system == "Windows":
         import sys as _sys
+
+        if deferred_bat is None:
+            _fallback_bat = Path.home() / ".local" / "bin" / "kim.bat"
+            if _fallback_bat.exists():
+                deferred_bat = _fallback_bat
 
         exe_candidates = [
             Path(_sys.executable).parent / "Scripts" / "kim.exe",
