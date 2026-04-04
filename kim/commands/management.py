@@ -7,7 +7,7 @@ import os
 import platform
 import sys
 
-from ..core import CONFIG, load_config, log
+from ..core import CONFIG, load_config, log, parse_at_time
 from ..utils import CHECK
 
 # CREATE_NO_WINDOW flag used when spawning subprocesses on Windows
@@ -37,21 +37,44 @@ def _save_config(config: dict) -> None:
 def cmd_add(args):
     config = load_config()
     name = args.name
-    interval_str = args.interval
 
     for r in config.get("reminders", []):
         if r.get("name") == name:
             print(f"Reminder '{name}' already exists. Use 'kim update' to modify it.")
             sys.exit(1)
 
-    new_reminder = {
-        "name": name,
-        "interval": interval_str,
-        "title": args.title or f"Reminder: {name}",
-        "message": args.message or "Time for a reminder!",
-        "urgency": args.urgency,
-        "enabled": True,
-    }
+    # Resolve interval vs --at
+    at_time = getattr(args, "at_time", None)
+    interval_str = getattr(args, "interval", None)
+    tz_name = getattr(args, "timezone", None)
+
+    if at_time:
+        try:
+            at_time = parse_at_time(at_time, tz_name)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        new_reminder = {
+            "name": name,
+            "at": at_time,
+            "title": args.title or f"Reminder: {name}",
+            "message": args.message or "Time for a reminder!",
+            "urgency": args.urgency,
+            "enabled": True,
+        }
+        if tz_name:
+            new_reminder["timezone"] = tz_name
+        schedule_desc = f"daily at {at_time}"
+    else:
+        new_reminder = {
+            "name": name,
+            "interval": interval_str,
+            "title": args.title or f"Reminder: {name}",
+            "message": args.message or "Time for a reminder!",
+            "urgency": args.urgency,
+            "enabled": True,
+        }
+        schedule_desc = f"every {interval_str}"
 
     if args.sound_file:
         new_reminder["sound_file"] = args.sound_file
@@ -67,7 +90,7 @@ def cmd_add(args):
     config.setdefault("reminders", []).append(new_reminder)
     _save_config(config)
 
-    print(f"{CHECK} Added reminder '{name}' (every {interval_str})")
+    print(f"{CHECK} Added reminder '{name}' ({schedule_desc})")
     log.info("Added reminder: %s", name)
 
 
@@ -136,7 +159,24 @@ def cmd_update(args):
     for r in config.get("reminders", []):
         if r.get("name") == name:
             found = True
-            if args.interval is not None:
+            at_time = getattr(args, "at_time", None)
+            tz_name = getattr(args, "timezone", None)
+            if at_time:
+                try:
+                    at_time = parse_at_time(at_time, tz_name)
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    sys.exit(1)
+                # Switch from interval to at-time schedule
+                r.pop("interval", None)
+                r.pop("interval_minutes", None)
+                r["at"] = at_time
+                if tz_name:
+                    r["timezone"] = tz_name
+            elif args.interval is not None:
+                # Switch from at-time to interval schedule
+                r.pop("at", None)
+                r.pop("timezone", None)
                 r["interval"] = args.interval
             if args.title is not None:
                 r["title"] = args.title

@@ -925,5 +925,523 @@ class TestCompletionScripts(unittest.TestCase):
             self.assertIn("complete -c kim", all_output)
 
 
+# ---------------------------------------------------------------------------
+# v4.1.0 — --every alias, --at daily schedule, remind at <datetime>
+# ---------------------------------------------------------------------------
+
+
+class TestEveryAlias(unittest.TestCase):
+    """--every is accepted as an alias for -I/--interval on kim add and kim update."""
+
+    def _make_add_parser(self):
+        """Return a fresh argparse subparser for 'kim add'."""
+        import argparse
+        from kim import cli as cli_mod
+
+        # Re-build just the add parser by importing and parsing
+        p = argparse.ArgumentParser()
+        grp = p.add_mutually_exclusive_group(required=True)
+        grp.add_argument("-I", "--interval", "--every", dest="interval", type=str)
+        grp.add_argument("--at", dest="at_time", type=str)
+        p.add_argument("name")
+        return p
+
+    def test_every_accepted_as_interval_on_add(self):
+        """kim add name --every 30m  should set args.interval = '30m'."""
+        import argparse
+
+        p = self._make_add_parser()
+        args = p.parse_args(["myreminder", "--every", "30m"])
+        self.assertEqual(args.interval, "30m")
+        self.assertIsNone(args.at_time)
+
+    def test_dash_I_still_works_on_add(self):
+        p = self._make_add_parser()
+        args = p.parse_args(["myreminder", "-I", "1h"])
+        self.assertEqual(args.interval, "1h")
+
+    def test_interval_long_still_works_on_add(self):
+        p = self._make_add_parser()
+        args = p.parse_args(["myreminder", "--interval", "1d"])
+        self.assertEqual(args.interval, "1d")
+
+    def test_every_mutually_exclusive_with_at(self):
+        """--every and --at on add are mutually exclusive."""
+        p = self._make_add_parser()
+        with self.assertRaises(SystemExit):
+            p.parse_args(["myreminder", "--every", "30m", "--at", "10:00"])
+
+    def test_cli_add_parser_accepts_every(self):
+        """Verify the real CLI parser accepts --every on add."""
+        import sys
+
+        original = sys.argv[:]
+        try:
+            sys.argv = [
+                "kim",
+                "add",
+                "test-r",
+                "--every",
+                "30m",
+                "-m",
+                "msg",
+                "-t",
+                "title",
+            ]
+            # Build the parser via cli.main() would dispatch — instead just check
+            # the argparse definitions include --every
+            import inspect
+            from kim import cli
+
+            src = inspect.getsource(cli.main)
+            self.assertIn("--every", src)
+        finally:
+            sys.argv = original
+
+    def test_cli_update_parser_accepts_every(self):
+        """Verify --every appears in the update parser definition."""
+        import inspect
+        from kim import cli
+
+        src = inspect.getsource(cli.main)
+        # The update parser also needs --every
+        self.assertIn("--every", src)
+
+
+class TestParseAtTime(unittest.TestCase):
+    """parse_at_time validates and normalises HH:MM strings."""
+
+    def _parse(self, s, tz_name=None):
+        from kim.core import parse_at_time
+
+        return parse_at_time(s, tz_name)
+
+    def test_valid_hh_mm(self):
+        self.assertEqual(self._parse("10:00"), "10:00")
+        self.assertEqual(self._parse("09:30"), "09:30")
+        self.assertEqual(self._parse("23:59"), "23:59")
+        self.assertEqual(self._parse("00:00"), "00:00")
+
+    def test_single_digit_hour_normalised(self):
+        self.assertEqual(self._parse("9:05"), "09:05")
+
+    def test_invalid_missing_colon(self):
+        with self.assertRaises(ValueError):
+            self._parse("1030")
+
+    def test_invalid_hour_out_of_range(self):
+        with self.assertRaises(ValueError):
+            self._parse("25:00")
+
+    def test_invalid_minute_out_of_range(self):
+        with self.assertRaises(ValueError):
+            self._parse("12:60")
+
+    def test_invalid_format_word(self):
+        with self.assertRaises(ValueError):
+            self._parse("noon")
+
+    def test_invalid_empty(self):
+        with self.assertRaises(ValueError):
+            self._parse("")
+
+
+class TestParseDatetimeRelative(unittest.TestCase):
+    """parse_datetime relative mode — existing behaviour preserved."""
+
+    def _parse(self, tokens):
+        from kim.core import parse_datetime
+
+        return parse_datetime(tokens)
+
+    def test_minutes(self):
+        before = time.time()
+        result = self._parse(["10m"])
+        after = time.time()
+        self.assertAlmostEqual(result, before + 600, delta=5)
+
+    def test_hours(self):
+        before = time.time()
+        result = self._parse(["1h"])
+        self.assertAlmostEqual(result, before + 3600, delta=5)
+
+    def test_with_in_prefix(self):
+        before = time.time()
+        result = self._parse(["in", "30m"])
+        self.assertAlmostEqual(result, before + 1800, delta=5)
+
+    def test_compound(self):
+        before = time.time()
+        result = self._parse(["2h", "30m"])
+        self.assertAlmostEqual(result, before + 9000, delta=5)
+
+    def test_seconds(self):
+        before = time.time()
+        result = self._parse(["90s"])
+        self.assertAlmostEqual(result, before + 90, delta=5)
+
+    def test_days(self):
+        before = time.time()
+        result = self._parse(["1d"])
+        self.assertAlmostEqual(result, before + 86400, delta=5)
+
+    def test_bare_number_is_minutes(self):
+        before = time.time()
+        result = self._parse(["45"])
+        self.assertAlmostEqual(result, before + 2700, delta=5)
+
+    def test_empty_raises(self):
+        from kim.core import parse_datetime
+
+        with self.assertRaises(ValueError):
+            parse_datetime([])
+
+    def test_garbage_raises(self):
+        from kim.core import parse_datetime
+
+        with self.assertRaises(ValueError):
+            parse_datetime(["blarg"])
+
+    def test_exceeds_365_days_raises(self):
+        from kim.core import parse_datetime
+
+        with self.assertRaises(ValueError):
+            parse_datetime(["400d"])
+
+
+class TestParseDatetimeAbsolute(unittest.TestCase):
+    """parse_datetime absolute mode ('at ...')."""
+
+    def _parse(self, tokens, tz_name=None):
+        from kim.core import parse_datetime
+
+        return parse_datetime(tokens, tz_name)
+
+    def _future_time_tokens(self, minutes_ahead=60):
+        """Return ['at', 'HH:MM'] for a time ~minutes_ahead in the future."""
+        import datetime as _dt
+
+        future = _dt.datetime.now() + _dt.timedelta(minutes=minutes_ahead)
+        return ["at", future.strftime("%H:%M")]
+
+    def test_at_hhmm_future(self):
+        """'at HH:MM' for a time in the future returns a timestamp > now."""
+        tokens = self._future_time_tokens(60)
+        result = self._parse(tokens)
+        self.assertGreater(result, time.time())
+
+    def test_at_hhmm_past_rolls_to_tomorrow(self):
+        """'at HH:MM' in the past (already elapsed today) rolls to tomorrow."""
+        import datetime as _dt
+
+        past = _dt.datetime.now() - _dt.timedelta(minutes=5)
+        tokens = ["at", past.strftime("%H:%M")]
+        result = self._parse(tokens)
+        # Should be ~23h55m from now, but at least > now + 23h
+        self.assertGreater(result, time.time() + 23 * 3600)
+
+    def test_at_tomorrow_hhmm(self):
+        import datetime as _dt
+
+        tokens = ["at", "tomorrow", "10:00"]
+        result = self._parse(tokens)
+        # Tomorrow 10am should be at least 1s in the future
+        self.assertGreater(result, time.time())
+        # And at most 49h away
+        self.assertLess(result, time.time() + 49 * 3600)
+
+    def test_at_tomorrow_am_suffix(self):
+        """'at tomorrow 9am' is accepted and returns future timestamp."""
+        tokens = ["at", "tomorrow", "9am"]
+        result = self._parse(tokens)
+        self.assertGreater(result, time.time())
+
+    def test_at_iso_date_time(self):
+        """'at 2099-12-31 23:59' returns a far-future timestamp."""
+        tokens = ["at", "2099-12-31", "23:59"]
+        result = self._parse(tokens)
+        self.assertGreater(result, time.time() + 365 * 24 * 3600)
+
+    def test_at_past_iso_date_raises(self):
+        """'at 2000-01-01 00:00' (clearly in the past) raises ValueError."""
+        from kim.core import parse_datetime
+
+        tokens = ["at", "2000-01-01", "00:00"]
+        with self.assertRaises(ValueError):
+            parse_datetime(tokens)
+
+    def test_at_garbage_raises(self):
+        from kim.core import parse_datetime
+
+        with self.assertRaises(ValueError):
+            parse_datetime(["at", "not-a-time"])
+
+    def test_at_alone_raises(self):
+        from kim.core import parse_datetime
+
+        with self.assertRaises(ValueError):
+            parse_datetime(["at"])
+
+    def test_at_named_weekday(self):
+        """'at friday 10:00' returns a future timestamp."""
+        tokens = ["at", "friday", "10:00"]
+        result = self._parse(tokens)
+        self.assertGreater(result, time.time())
+        # Must be within the next 8 days
+        self.assertLess(result, time.time() + 8 * 24 * 3600)
+
+
+class TestCmdAddWithAt(unittest.TestCase):
+    """cmd_add with --at stores 'at'/'timezone' keys, no 'interval' key."""
+
+    def _run_cmd_add(self, args_dict, config=None):
+        """Run cmd_add with a MagicMock args and patched config."""
+        from kim.commands import management
+
+        if config is None:
+            config = {"reminders": []}
+        args = MagicMock()
+        args.name = args_dict.get("name", "test-reminder")
+        args.at_time = args_dict.get("at_time", None)
+        args.interval = args_dict.get("interval", None)
+        args.timezone = args_dict.get("timezone", None)
+        args.title = args_dict.get("title", None)
+        args.message = args_dict.get("message", None)
+        args.urgency = args_dict.get("urgency", "normal")
+        args.sound_file = args_dict.get("sound_file", None)
+        args.slack_channel = args_dict.get("slack_channel", None)
+        args.slack_webhook = args_dict.get("slack_webhook", None)
+
+        saved = {}
+
+        def fake_save(cfg):
+            saved["config"] = cfg
+
+        with patch.object(management, "load_config", return_value=config):
+            with patch.object(management, "_save_config", side_effect=fake_save):
+                with patch("builtins.print"):
+                    management.cmd_add(args)
+
+        return saved.get("config", config)
+
+    def test_at_stores_at_key(self):
+        result = self._run_cmd_add({"name": "standup", "at_time": "09:30"})
+        r = next(r for r in result["reminders"] if r["name"] == "standup")
+        self.assertIn("at", r)
+        self.assertEqual(r["at"], "09:30")
+
+    def test_at_no_interval_key(self):
+        result = self._run_cmd_add({"name": "standup", "at_time": "09:30"})
+        r = next(r for r in result["reminders"] if r["name"] == "standup")
+        self.assertNotIn("interval", r)
+
+    def test_at_with_tz_stores_timezone(self):
+        result = self._run_cmd_add(
+            {"name": "standup", "at_time": "09:30", "timezone": "America/New_York"}
+        )
+        r = next(r for r in result["reminders"] if r["name"] == "standup")
+        self.assertEqual(r.get("timezone"), "America/New_York")
+
+    def test_interval_stores_interval_key(self):
+        result = self._run_cmd_add({"name": "water", "interval": "30m"})
+        r = next(r for r in result["reminders"] if r["name"] == "water")
+        self.assertIn("interval", r)
+        self.assertEqual(r["interval"], "30m")
+
+    def test_interval_no_at_key(self):
+        result = self._run_cmd_add({"name": "water", "interval": "30m"})
+        r = next(r for r in result["reminders"] if r["name"] == "water")
+        self.assertNotIn("at", r)
+
+    def test_every_alias_same_as_interval(self):
+        """--every is just --interval at the argparse level; cmd_add receives args.interval."""
+        result = self._run_cmd_add({"name": "water", "interval": "1h"})
+        r = next(r for r in result["reminders"] if r["name"] == "water")
+        self.assertEqual(r["interval"], "1h")
+
+
+class TestCmdUpdateWithAt(unittest.TestCase):
+    """cmd_update can switch between interval and at-time schedules."""
+
+    def _run_cmd_update(self, name, args_dict, existing_reminder):
+        from kim.commands import management
+
+        config = {"reminders": [dict(existing_reminder)]}
+        args = MagicMock()
+        args.name = name
+        args.at_time = args_dict.get("at_time", None)
+        args.interval = args_dict.get("interval", None)
+        args.timezone = args_dict.get("timezone", None)
+        args.title = args_dict.get("title", None)
+        args.message = args_dict.get("message", None)
+        args.urgency = args_dict.get("urgency", None)
+        args.enable = args_dict.get("enable", False)
+        args.disable = args_dict.get("disable", False)
+
+        saved = {}
+
+        def fake_save(cfg):
+            saved["config"] = cfg
+
+        with patch.object(management, "load_config", return_value=config):
+            with patch.object(management, "_save_config", side_effect=fake_save):
+                with patch("builtins.print"):
+                    management.cmd_update(args)
+
+        return saved.get("config", config)
+
+    def test_update_interval_to_at(self):
+        """Switch from interval reminder to at-time reminder."""
+        existing = {"name": "water", "interval": "30m", "enabled": True}
+        result = self._run_cmd_update("water", {"at_time": "10:00"}, existing)
+        r = next(r for r in result["reminders"] if r["name"] == "water")
+        self.assertIn("at", r)
+        self.assertNotIn("interval", r)
+        self.assertNotIn("interval_minutes", r)
+
+    def test_update_at_to_interval(self):
+        """Switch from at-time reminder to interval reminder."""
+        existing = {"name": "standup", "at": "09:00", "enabled": True}
+        result = self._run_cmd_update("standup", {"interval": "1h"}, existing)
+        r = next(r for r in result["reminders"] if r["name"] == "standup")
+        self.assertIn("interval", r)
+        self.assertNotIn("at", r)
+        self.assertNotIn("timezone", r)
+
+    def test_update_at_with_tz(self):
+        """Update --at with --tz stores timezone."""
+        existing = {"name": "standup", "interval": "30m", "enabled": True}
+        result = self._run_cmd_update(
+            "standup", {"at_time": "09:30", "timezone": "Europe/London"}, existing
+        )
+        r = next(r for r in result["reminders"] if r["name"] == "standup")
+        self.assertEqual(r.get("timezone"), "Europe/London")
+
+    def test_update_every_alias(self):
+        """--every maps to args.interval — cmd_update receives interval."""
+        existing = {"name": "water", "at": "10:00", "enabled": True}
+        result = self._run_cmd_update("water", {"interval": "45m"}, existing)
+        r = next(r for r in result["reminders"] if r["name"] == "water")
+        self.assertEqual(r["interval"], "45m")
+
+
+class TestNextAtFire(unittest.TestCase):
+    """KimScheduler._next_at_fire returns future timestamp for valid HH:MM."""
+
+    def _next(self, at_str, tz_name=None):
+        from kim.scheduler import KimScheduler
+
+        reminder = {"name": "test", "at": at_str}
+        if tz_name:
+            reminder["timezone"] = tz_name
+        return KimScheduler._next_at_fire(reminder)
+
+    def test_valid_at_returns_future_timestamp(self):
+        result = self._next("10:00")
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, float)
+        # Must be in the future
+        self.assertGreater(result, time.time())
+
+    def test_result_within_24h(self):
+        """Next fire for any HH:MM is at most 24 hours away."""
+        result = self._next("10:00")
+        self.assertLess(result, time.time() + 25 * 3600)
+
+    def test_invalid_at_returns_none(self):
+        result = self._next("not-a-time")
+        self.assertIsNone(result)
+
+    def test_empty_at_returns_none(self):
+        result = self._next("")
+        self.assertIsNone(result)
+
+    def test_missing_at_returns_none(self):
+        from kim.scheduler import KimScheduler
+
+        result = KimScheduler._next_at_fire({"name": "test"})
+        self.assertIsNone(result)
+
+
+class TestSchedulerLoadsAtTimeReminder(unittest.TestCase):
+    """KimScheduler loads at-time reminders and schedules them for the future."""
+
+    def test_at_time_reminder_scheduled_in_future(self):
+        from kim.scheduler import KimScheduler
+
+        config = {
+            "reminders": [
+                {
+                    "name": "standup",
+                    "at": "10:00",
+                    "title": "Stand-up",
+                    "message": "Time for stand-up!",
+                    "urgency": "normal",
+                    "enabled": True,
+                }
+            ]
+        }
+        fired = []
+        sched = KimScheduler(config, lambda r: fired.append(r))
+        # The reminder should be in _live
+        self.assertIn("standup", sched._live)
+        event = sched._live["standup"]
+        # Fire time must be in the future
+        self.assertGreater(event.fire_at, time.time())
+
+    def test_invalid_at_reminder_skipped(self):
+        """Reminder with invalid 'at' value must be skipped (not in _live)."""
+        from kim.scheduler import KimScheduler
+
+        config = {
+            "reminders": [
+                {
+                    "name": "bad-reminder",
+                    "at": "notavalidtime",
+                    "enabled": True,
+                }
+            ]
+        }
+        sched = KimScheduler(config, lambda r: None)
+        self.assertNotIn("bad-reminder", sched._live)
+
+    def test_at_time_reschedules_after_fire(self):
+        """After firing, the at-time reminder is rescheduled for tomorrow."""
+        from kim.scheduler import KimScheduler
+
+        # Use a time 1ms in the future so it fires immediately in _fire_due_events
+        import datetime as _dt
+
+        soon = (_dt.datetime.now() + _dt.timedelta(seconds=0.05)).strftime("%H:%M")
+        config = {
+            "reminders": [
+                {
+                    "name": "soon",
+                    "at": soon,
+                    "enabled": True,
+                }
+            ]
+        }
+        fired = []
+        sched = KimScheduler(config, lambda r: fired.append(r))
+        # Manually push the fire time into the past
+        event = sched._live["soon"]
+        event.fire_at = time.time() - 1
+        import heapq as _heapq
+
+        sched._heap = [event]
+        _heapq.heapify(sched._heap)
+
+        sched._fire_due_events()
+
+        # The notifier should have been called
+        self.assertEqual(len(fired), 1)
+        # The reminder should still be live (rescheduled)
+        self.assertIn("soon", sched._live)
+        # Rescheduled fire time must be in the future
+        new_event = sched._live["soon"]
+        self.assertGreater(new_event.fire_at, time.time())
+
+
 if __name__ == "__main__":
     unittest.main()

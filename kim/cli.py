@@ -53,7 +53,7 @@ commands:
   enable      Enable a reminder
   disable     Disable a reminder
   update      Update a reminder
-  remind      Fire a one-shot reminder after a delay
+  remind      Fire a one-shot reminder after a delay or at a time
   interactive Enter interactive mode (alias: -i)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
@@ -90,12 +90,22 @@ logs:   ~/.kim/kim.log
 
     add_p = sub.add_parser("add", help="Add a new reminder")
     add_p.add_argument("name", help="Reminder name")
-    add_p.add_argument(
+    add_interval = add_p.add_mutually_exclusive_group(required=True)
+    add_interval.add_argument(
         "-I",
         "--interval",
+        "--every",
+        dest="interval",
         type=str,
-        required=True,
+        metavar="INTERVAL",
         help="Interval (e.g., 30m, 1h, 1d, or just number for minutes)",
+    )
+    add_interval.add_argument(
+        "--at",
+        dest="at_time",
+        type=str,
+        metavar="HH:MM",
+        help="Fire daily at a fixed time, e.g. --at 10:00 (uses local timezone)",
     )
     add_p.add_argument("-t", "--title", help="Notification title")
     add_p.add_argument("-m", "--message", help="Notification message")
@@ -105,6 +115,12 @@ logs:   ~/.kim/kim.log
         choices=["low", "normal", "critical"],
         default="normal",
         help="Urgency level",
+    )
+    add_p.add_argument(
+        "--tz",
+        dest="timezone",
+        metavar="TZ",
+        help="Timezone for --at, e.g. Asia/Kolkata (default: local system timezone)",
     )
     add_p.add_argument("--sound-file", help="Per-reminder sound file path")
     add_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
@@ -122,7 +138,26 @@ logs:   ~/.kim/kim.log
     update_p = sub.add_parser("update", help="Update a reminder")
     update_p.add_argument("name", help="Reminder name")
     update_p.add_argument(
-        "-I", "--interval", type=str, help="New interval (e.g., 30m, 1h, 1d)"
+        "-I",
+        "--interval",
+        "--every",
+        dest="interval",
+        type=str,
+        metavar="INTERVAL",
+        help="New interval (e.g., 30m, 1h, 1d)",
+    )
+    update_p.add_argument(
+        "--at",
+        dest="at_time",
+        type=str,
+        metavar="HH:MM",
+        help="Change to daily at a fixed time, e.g. --at 10:00",
+    )
+    update_p.add_argument(
+        "--tz",
+        dest="timezone",
+        metavar="TZ",
+        help="Timezone for --at (default: local system timezone)",
     )
     update_p.add_argument("-t", "--title", help="New notification title")
     update_p.add_argument("-m", "--message", help="New notification message")
@@ -138,13 +173,26 @@ logs:   ~/.kim/kim.log
     update_p.add_argument("--slack-channel", help="Per-reminder Slack channel")
     update_p.add_argument("--slack-webhook", help="Per-reminder Slack webhook URL")
 
-    remind_p = sub.add_parser("remind", help="Fire a one-shot reminder after a delay")
+    remind_p = sub.add_parser(
+        "remind", help="Fire a one-shot reminder after a delay or at a specific time"
+    )
     remind_p.add_argument("message", help="Reminder message")
     remind_p.add_argument(
-        "time", nargs="+", help="When to fire, e.g: 'in 10m', '1h', '2h 30m', '90s'"
+        "time",
+        nargs="+",
+        help=(
+            "When to fire. Relative: 'in 10m', '1h', '2h 30m', '90s'. "
+            "Absolute: 'at 14:30', 'at tomorrow 10am', 'at 2026-04-06 09:00'"
+        ),
     )
     remind_p.add_argument(
         "-t", "--title", help="Notification title (default: \u23f0 Reminder)"
+    )
+    remind_p.add_argument(
+        "--tz",
+        dest="timezone",
+        metavar="TZ",
+        help="Timezone for 'at' datetime (default: local system timezone)",
     )
 
     fire_p = sub.add_parser("_remind-fire")

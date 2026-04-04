@@ -38,22 +38,30 @@ kim logs -n 50   # Last 50 lines
 ### `kim add`
 
 ```bash
-kim add NAME -I INTERVAL [-t TITLE] [-m MESSAGE] [-u URGENCY] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
+kim add NAME (-I|-E INTERVAL | --every INTERVAL | --at HH:MM) [-t TITLE] [-m MESSAGE] [-u URGENCY] [--tz TZ] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
 ```
 
 **Options:**
-- `-I, --interval` — Interval (e.g., `30m`, `1h`, `1d`, or just number for minutes) [required]
+- `-I, --interval, --every` — Recurring interval (e.g., `30m`, `1h`, `1d`) [required unless --at]
+- `--at HH:MM` — Fire daily at a fixed time, e.g. `--at 10:00` [required unless --interval]
 - `-t, --title` — Notification title
 - `-m, --message` — Notification message
 - `-u, --urgency` — `low`, `normal`, `critical` (default: `normal`)
+- `--tz TZ` — IANA timezone for `--at`, e.g. `Asia/Kolkata` (default: local system timezone)
 - `--sound-file` — Per-reminder sound file path (overrides global)
 - `--slack-channel` — Per-reminder Slack channel
 - `--slack-webhook` — Per-reminder Slack webhook URL
 
 **Example:**
 ```bash
+# Interval-based (unchanged, --every is now also accepted)
 kim add eye-break -I 30m -t "👁️ Eye Break" -m "Look away from screen" -u critical
+kim add "drink water" --every 1h
 kim add standup -I 30m --slack-channel "#standup" --sound-file ~/sounds/urgent.wav
+
+# Daily at a fixed time
+kim add standup --at 10:00
+kim add standup --at 10:00 --tz Asia/Kolkata
 ```
 
 ### `kim remove`
@@ -72,10 +80,13 @@ kim disable NAME
 ### `kim update`
 
 ```bash
-kim update NAME [-I INTERVAL] [-t TITLE] [-m MESSAGE] [-u URGENCY] [--enable] [--disable] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
+kim update NAME [-I INTERVAL] [--every INTERVAL] [--at HH:MM] [--tz TZ] [-t TITLE] [-m MESSAGE] [-u URGENCY] [--enable] [--disable] [--sound-file FILE] [--slack-channel CHANNEL] [--slack-webhook URL]
 ```
 
 **New options:**
+- `--every` — Alias for `--interval`
+- `--at HH:MM` — Switch to daily at-time schedule
+- `--tz TZ` — Timezone for `--at`
 - `--sound-file` — Set per-reminder sound file
 - `--slack-channel` — Set per-reminder Slack channel
 - `--slack-webhook` — Set per-reminder Slack webhook URL
@@ -83,19 +94,39 @@ kim update NAME [-I INTERVAL] [-t TITLE] [-m MESSAGE] [-u URGENCY] [--enable] [-
 ## One-shot Reminders
 
 ```bash
-kim remind MESSAGE TIME [TIME ...] [-t TITLE]
+kim remind MESSAGE TIME [...] [-t TITLE] [--tz TZ]
 ```
 
-**TIME format:** `in 10m`, `1h`, `2h 30m`, `90s`
+**TIME — relative:**
+```
+in 10m      10 minutes from now
+1h          1 hour
+2h 30m      2 hours 30 minutes
+90s         90 seconds
+```
+
+**TIME — absolute (`at ...`):**
+```
+at 14:30               today at 14:30 (or tomorrow if already past)
+at tomorrow 10am       tomorrow at 10:00
+at friday 9am          next Friday at 09:00
+at 2026-04-06 09:00    specific date and time
+```
+
+**Options:**
+- `--tz TZ` — IANA timezone for absolute times (default: local system timezone)
 
 **Examples:**
 ```bash
 kim remind "standup call" in 10m
 kim remind "take a break" 1h
 kim remind "deploy window opens" 2h 30m
+kim remind "standup" at 10:00
+kim remind "standup" at tomorrow 9am
+kim remind "call" at 2026-04-06 14:30 --tz America/New_York
 ```
 
-**Persistence:** One-shot reminders are persisted to disk (`~/.kim/oneshots.json`) and will survive daemon restarts and system reboots. When the daemon starts, it loads any pending one-shot reminders and fires them at the scheduled time. Expired reminders are automatically cleaned up.
+**Persistence:** One-shot reminders are persisted to disk (`~/.kim/oneshots.json`) and survive daemon restarts and system reboots. Expired reminders are automatically cleaned up.
 
 ## Configuration
 
