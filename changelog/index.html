@@ -655,6 +655,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#412-2026-04-05" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [4.1.2] - 2026-04-05
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[4.1.2] - 2026-04-05">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#411-2026-04-05" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -667,7 +695,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -756,7 +784,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -828,7 +856,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -878,7 +906,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1017,6 +1045,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#412-2026-04-05" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [4.1.2] - 2026-04-05
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[4.1.2] - 2026-04-05">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#411-2026-04-05" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1029,7 +1085,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1118,7 +1174,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_1" class="md-nav__link">
+  <a href="#fixed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1190,7 +1246,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_2" class="md-nav__link">
+  <a href="#fixed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1240,7 +1296,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed_3" class="md-nav__link">
+  <a href="#fixed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1358,8 +1414,13 @@
 <p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
 and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <h2 id="unreleased">[Unreleased]<a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
-<h2 id="411-2026-04-05">[4.1.1] - 2026-04-05<a class="headerlink" href="#411-2026-04-05" title="Permanent link">&para;</a></h2>
+<h2 id="412-2026-04-05">[4.1.2] - 2026-04-05<a class="headerlink" href="#412-2026-04-05" title="Permanent link">&para;</a></h2>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Windows PATH instructions</strong> — README now shows a copy-paste one-liner to fix PATH after <code>pip install</code>. <code>install.ps1</code> also auto-fixes the pip Scripts PATH for users who already installed via pip.</li>
+</ul>
+<h2 id="411-2026-04-05">[4.1.1] - 2026-04-05<a class="headerlink" href="#411-2026-04-05" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Windows PATH auto-fix</strong> — on Windows, <code>kim</code> now detects if the pip Scripts directory is missing from the user <code>PATH</code> and adds it automatically via <code>setx</code> on first run. Users no longer need to manually update their PATH after <code>pip install kim-reminder</code>.</li>
 </ul>
@@ -1406,7 +1467,7 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 <li><strong><code>kim remind</code> parser</strong> — bare numbers treated as minutes, max duration clamped to 365 days</li>
 <li><strong><code>kim</code> with no command</strong> — now exits with code 1 instead of silently returning</li>
 </ul>
-<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Critical: Slack bot urgency bug</strong> — <code>_notify_slack_bot()</code> referenced undefined <code>urgency</code> variable (NameError crash)</li>
 <li><strong>Critical: Slack emoji bug</strong> — <code>emoji = urgency_emoji.get("normal", ":bell:")</code> hardcoded "normal" instead of using actual urgency</li>
@@ -1459,7 +1520,7 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 <li>Updated test suite to work across OS</li>
 <li>Separated CLI, commands, scheduler, notifications, sound, etc.</li>
 </ul>
-<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Unicode encoding errors on Windows console</li>
 <li>Box drawing character rendering in tests</li>
@@ -1486,7 +1547,7 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 <li>Platform-specific notification backends</li>
 <li>Config auto-reload</li>
 </ul>
-<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Windows PowerShell toast notifications</li>
 <li>macOS notification sound handling</li>
