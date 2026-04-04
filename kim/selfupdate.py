@@ -668,23 +668,38 @@ def cmd_uninstall(args):
     # handles are released by the OS.
     deferred_files = [p for p in (deferred_bat, deferred_exe) if p and p.exists()]
     if deferred_files or deferred_kimdir:
-        cmds = []
+        # Use PowerShell for the deferred cleanup — cleaner quoting and retry logic.
+        # Start-Sleep 3 gives this process time to exit and release kim.log.
+        ps_lines = ["Start-Sleep 3"]
         if deferred_kimdir:
-            cmds.append(f'rmdir /s /q "{deferred_kimdir}"')
+            d = str(deferred_kimdir).replace("'", "''")
+            # Retry up to 5 times with 1s gaps in case the log fd takes a moment.
+            ps_lines.append(
+                f"for($i=0;$i -lt 5;$i++){{"
+                f"if(Test-Path '{d}'){{"
+                f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"
+                f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}"
+            )
         for p in deferred_files:
-            cmds.append(f'del /f /q "{p}"')
-        deferred_cmd = "ping -n 3 127.0.0.1 >nul & " + " & ".join(cmds)
+            ps = str(p).replace("'", "''")
+            ps_lines.append(f"Remove-Item '{ps}' -Force -ErrorAction SilentlyContinue")
+        ps_script = "; ".join(ps_lines)
         try:
-            # Pass as a single string so cmd.exe parses the & operators itself.
-            # CREATE_NO_WINDOW (0x08000000) keeps it invisible.
             subprocess.Popen(
-                f'cmd /c "{deferred_cmd}"',
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    ps_script,
+                ],
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
                 close_fds=True,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                shell=True,
             )
         except Exception:
             pass  # non-fatal
