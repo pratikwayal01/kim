@@ -244,10 +244,21 @@ logs:   ~/.kim/kim.log
     remind_p = sub.add_parser(
         "remind", help="Fire a one-shot reminder after a delay or at a specific time"
     )
-    remind_p.add_argument("message", help="Reminder message")
+    remind_p.add_argument(
+        "--list",
+        dest="list_oneshots",
+        action="store_true",
+        help="List all pending one-shot reminders",
+    )
+    remind_p.add_argument(
+        "--cancel",
+        metavar="INDEX_OR_MSG",
+        help="Cancel a pending one-shot by its list index or message substring",
+    )
+    remind_p.add_argument("message", nargs="?", help="Reminder message")
     remind_p.add_argument(
         "time",
-        nargs="+",
+        nargs="*",
         help=(
             "When to fire. Relative: 'in 10m', '1h', '2h 30m', '90s'. "
             "Absolute: 'at 14:30', 'at tomorrow 10am', 'at 2026-04-06 09:00'"

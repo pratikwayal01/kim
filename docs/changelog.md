@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.4] - 2026-04-05
+
+### Added
+- **`kim remind --list`** — show all pending one-shot reminders with index, message, fire time, and time remaining.
+- **`kim remind --cancel <index|message>`** — cancel a pending one-shot by its list index (from `--list`) or a message substring match.
+
 ## [4.1.3] - 2026-04-05
 
 ### Fixed
