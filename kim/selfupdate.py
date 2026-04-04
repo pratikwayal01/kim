@@ -560,14 +560,9 @@ def cmd_uninstall(args):
             print("No scheduled task found (or already removed).")
 
     # --- Release all log file handles before touching KIM_DIR ----------------
-    # On Windows, RotatingFileHandler keeps kim.log open for the lifetime of
-    # the process.  We must:
-    #   1. Close and remove handlers from the "kim" named logger (where they live)
-    #   2. Close and remove handlers from the root logger (belt-and-suspenders)
-    #   3. Null out the module-level _handler reference in kim.core so the
-    #      object can be garbage-collected — on Windows the file lock is not
-    #      released until the file descriptor is actually closed AND the object
-    #      is collected (no more references).
+    # Best-effort: close Python-level handlers so they flush; on Windows the OS
+    # file lock on kim.log will not be released until this process exits, so
+    # KIM_DIR removal is deferred (see below).
     for logger_name in ("kim", ""):
         _lg = logging.getLogger(logger_name)
         for handler in _lg.handlers[:]:
@@ -577,7 +572,6 @@ def cmd_uninstall(args):
                 pass
             _lg.removeHandler(handler)
     logging.shutdown()
-    # Kill the module-level reference so CPython GC can release the fd.
     try:
         import kim.core as _core
 
@@ -589,9 +583,6 @@ def cmd_uninstall(args):
             _core._handler = None
     except Exception:
         pass
-    import gc
-
-    gc.collect()
     # --------------------------------------------------------------------------
 
     binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
@@ -611,9 +602,11 @@ def cmd_uninstall(args):
     # "The batch file cannot be found." error after the process exits.
     # Similarly, kim.exe (pip-installed entry point) is the running process
     # itself, so os.unlink() on it yields WinError 5 (Access Denied).
-    # We collect both and schedule a deferred self-deletion instead.
+    # KIM_DIR itself cannot be removed because kim.log is locked by this process.
+    # All three are collected for deferred deletion after process exit.
     deferred_bat = None
     deferred_exe = None
+    deferred_kimdir = None
     _which = shutil.which("kim")
     if _which:
         which_path = Path(_which).resolve()
@@ -639,16 +632,13 @@ def cmd_uninstall(args):
                 deferred_exe = _exe
                 break
 
-    for path in [KIM_DIR] + list(dict.fromkeys(binary_candidates)):
+    for path in list(dict.fromkeys(binary_candidates)):
         if path.exists():
             if path.is_dir():
                 try:
                     shutil.rmtree(path)
                 except PermissionError as e:
                     print(f"Could not remove {path}: {e}")
-                    print(
-                        "  Close any programs using files in that folder, then delete it manually."
-                    )
                     continue
             else:
                 try:
@@ -658,19 +648,35 @@ def cmd_uninstall(args):
                     continue
             print(f"Removed {path}")
 
-    # Deferred deletion of any currently-running Windows binaries.
-    # Spawns a detached cmd that waits ~2 s then deletes the file(s) — by then
-    # this process has already exited so there is no file-in-use conflict.
+    # Remove KIM_DIR — on non-Windows we can do it now; on Windows the log file
+    # handle is held by this process so we must defer it like the binaries.
+    if KIM_DIR.exists():
+        if system == "Windows":
+            deferred_kimdir = KIM_DIR
+        else:
+            try:
+                shutil.rmtree(KIM_DIR)
+                print(f"Removed {KIM_DIR}")
+            except PermissionError as e:
+                print(f"Could not remove {KIM_DIR}: {e}")
+                print(
+                    "  Close any programs using files in that folder, then delete it manually."
+                )
+
+    # Deferred deletion: spawns a hidden cmd that waits ~2 s (ping trick) then
+    # removes all locked paths.  By then this process has exited and all file
+    # handles are released by the OS.
     deferred_files = [p for p in (deferred_bat, deferred_exe) if p and p.exists()]
-    if deferred_files:
-        del_cmds = " & ".join(f'del /f /q "{p}"' for p in deferred_files)
+    if deferred_files or deferred_kimdir:
+        cmds = []
+        if deferred_kimdir:
+            cmds.append(f'rmdir /s /q "{deferred_kimdir}"')
+        for p in deferred_files:
+            cmds.append(f'del /f /q "{p}"')
+        deferred_cmd = "ping -n 3 127.0.0.1 >nul & " + " & ".join(cmds)
         try:
             subprocess.Popen(
-                [
-                    "cmd",
-                    "/c",
-                    f"ping -n 3 127.0.0.1 >nul & {del_cmds}",
-                ],
+                ["cmd", "/c", deferred_cmd],
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
                 close_fds=True,
                 stdin=subprocess.DEVNULL,
