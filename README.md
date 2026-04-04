@@ -5,6 +5,8 @@
 
 **Documentation:** [https://pratikwayal01.github.io/kim/](https://pratikwayal01.github.io/kim/)
 
+![kim demo](assets/demo.gif)
+
 ---
 
 ## Install

@@ -4,3 +4,5 @@ __pycache__/
 *.mypy_cache/
 site/
 a.out
+build/
+dist/
