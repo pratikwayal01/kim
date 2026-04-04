@@ -1,9 +1,12 @@
 """
-Feature coverage tests for every new capability added in v4.1.x.
+Core and feature tests for the kim package.
 
-Each section documents the feature under test and exercises both the happy
-path and important edge/error cases.  No real filesystem writes to ~/.kim/,
-no network calls, no interactive TTY required.
+Structure:
+  - Core / entry-point sanity checks (formerly test_basic.py)
+  - Feature tests covering every capability (formerly test_features.py)
+
+Add new tests here as features are added or bugs are fixed. New *regression*
+tests for specific bug fixes belong in test_regression.py instead.
 """
 
 import json
@@ -18,6 +21,156 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from kim.core import load_config, parse_interval, DEFAULT_CONFIG, KIM_DIR, CONFIG
+from kim.scheduler import KimScheduler
+from kim.notifications import notify
+from kim.sound import validate_sound_file, SOUND_FORMAT_NOTES
+from kim.utils import (
+    CHECK,
+    CROSS,
+    BULLET,
+    EM_DASH,
+    WARNING,
+    CIRCLE_OPEN,
+    CIRCLE_FILLED,
+    MIDDOT,
+    ARROW,
+    HLINE,
+)
+
+
+# ===========================================================================
+# Core — parse_interval and load_config
+# ===========================================================================
+
+
+class TestCore(unittest.TestCase):
+    def test_parse_interval(self):
+        self.assertEqual(parse_interval(30), 1800)
+        self.assertEqual(parse_interval("30m"), 1800)
+        self.assertEqual(parse_interval("2h"), 7200)
+        self.assertEqual(parse_interval("1d"), 86400)
+        self.assertEqual(parse_interval("60s"), 60)
+        self.assertEqual(parse_interval("invalid"), 1800)
+        self.assertEqual(parse_interval(-5), 1800)
+        self.assertEqual(parse_interval(0), 1800)
+        self.assertEqual(parse_interval("45"), 2700)
+
+    def test_load_config_creates_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import kim.core
+
+            original_config = kim.core.CONFIG
+            original_log = kim.core.LOG_FILE
+            try:
+                kim.core.CONFIG = Path(tmpdir) / "config.json"
+                kim.core.LOG_FILE = Path(tmpdir) / "kim.log"
+                config = load_config()
+                self.assertIn("reminders", config)
+                self.assertEqual(len(config["reminders"]), 2)
+                self.assertTrue(kim.core.CONFIG.exists())
+            finally:
+                kim.core.CONFIG = original_config
+                kim.core.LOG_FILE = original_log
+
+
+# ===========================================================================
+# Scheduler — basic initialisation
+# ===========================================================================
+
+
+class TestScheduler(unittest.TestCase):
+    def test_scheduler_init(self):
+        config = {
+            "reminders": [{"name": "test", "interval_minutes": 1, "enabled": True}]
+        }
+
+        def dummy_notifier(reminder):
+            pass
+
+        scheduler = KimScheduler(config, dummy_notifier)
+        self.assertEqual(len(scheduler._live), 1)
+        scheduler.start()
+        scheduler.stop()
+
+
+# ===========================================================================
+# Utils — platform symbols and sound format notes
+# ===========================================================================
+
+
+class TestUtils(unittest.TestCase):
+    def test_platform_symbols(self):
+        self.assertIsInstance(CHECK, str)
+        self.assertIsInstance(CROSS, str)
+        if platform.system() == "Windows":
+            self.assertEqual(CHECK, "OK")
+            self.assertEqual(CROSS, "ERROR")
+            self.assertEqual(BULLET, "-")
+            self.assertEqual(EM_DASH, "--")
+        else:
+            self.assertEqual(CHECK, "✓")
+            self.assertEqual(CROSS, "✗")
+            self.assertEqual(BULLET, "•")
+            self.assertEqual(EM_DASH, "—")
+
+    def test_sound_format_notes(self):
+        self.assertIn(platform.system(), SOUND_FORMAT_NOTES)
+
+
+# ===========================================================================
+# Sound — validate_sound_file
+# ===========================================================================
+
+
+class TestSound(unittest.TestCase):
+    def test_validate_sound_file(self):
+        ok, err = validate_sound_file("/nonexistent.wav")
+        self.assertFalse(ok)
+        self.assertIn("File not found", err)
+
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"test")
+            fname = f.name
+        ok, err = validate_sound_file(fname)
+        self.assertFalse(ok)
+        self.assertIn("Unrecognised extension", err)
+        os.unlink(fname)
+
+
+# ===========================================================================
+# Entry points — kim.py and package importability
+# ===========================================================================
+
+
+class TestEntryPoint(unittest.TestCase):
+    def test_kim_py_exists(self):
+        repo_root = Path(__file__).parent.parent
+        kim_py = repo_root / "kim.py"
+        self.assertTrue(kim_py.exists(), f"Entry point missing: {kim_py}")
+        self.assertGreater(kim_py.stat().st_size, 0, "kim.py is empty")
+
+    def test_kim_package_importable(self):
+        import kim  # noqa: F401
+        from kim.cli import main  # noqa: F401
+        from kim.core import load_config  # noqa: F401
+
+    def test_kim_entry_point_runs(self):
+        import subprocess
+
+        repo_root = Path(__file__).parent.parent
+        kim_py = repo_root / "kim.py"
+        result = subprocess.run(
+            [sys.executable, str(kim_py), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(
+            result.returncode, 0, f"kim.py --version failed: {result.stderr}"
+        )
+        self.assertIn("kim", result.stdout.lower())
+
 
 # ===========================================================================
 # cmd_remind — one-shot reminder via CLI ("kim remind 'msg' in 30m")
@@ -29,19 +182,12 @@ class TestCmdRemind(unittest.TestCase):
     the oneshot to ONESHOT_FILE without forking/spawning a subprocess."""
 
     def _run_remind(self, args_dict, config=None, oneshot_file=None):
-        """
-        Run cmd_remind with a fake args object.
-        Returns (printed_output, saved_oneshots).
-        On Windows there is no os.fork; cmd_remind takes the Popen branch.
-        We patch subprocess.Popen to suppress the actual spawn.
-        """
         from kim.commands import misc
 
         args = MagicMock()
         args.message = args_dict.get("message", "Test reminder")
         args.title = args_dict.get("title", None)
         args.timezone = args_dict.get("timezone", None)
-        # time is a list of tokens as argparse would pass them
         args.time = args_dict.get("time", ["in", "30m"])
 
         if config is None:
@@ -58,15 +204,12 @@ class TestCmdRemind(unittest.TestCase):
             with patch.object(misc, "ONESHOT_FILE", fake_oneshot):
                 with patch.object(misc, "load_config", return_value=config):
                     with patch("builtins.print", side_effect=fake_print):
-                        # Patch both fork (Unix) and Popen (Windows) so nothing
-                        # actually forks or spawns regardless of platform.
                         with patch.object(misc.subprocess, "Popen"):
                             with patch.object(
                                 misc.os, "fork", return_value=1, create=True
                             ):
                                 misc.cmd_remind(args)
 
-            # Read back the saved oneshots
             if fake_oneshot.exists():
                 saved_data = json.loads(fake_oneshot.read_text())
             else:
@@ -82,7 +225,7 @@ class TestCmdRemind(unittest.TestCase):
     def test_remind_fire_at_is_in_future(self):
         before = time.time()
         _, saved = self._run_remind({"time": ["in", "30m"]})
-        self.assertGreater(saved[0]["fire_at"], before + 1700)  # ~30 min ahead
+        self.assertGreater(saved[0]["fire_at"], before + 1700)
 
     def test_remind_title_stored(self):
         _, saved = self._run_remind({"time": ["in", "5m"], "title": "MyTitle"})
@@ -99,13 +242,11 @@ class TestCmdRemind(unittest.TestCase):
         self.assertIn("drink water", combined)
 
     def test_remind_absolute_at_shows_wall_clock(self):
-        """'kim remind msg at 10:00' must print the wall-clock time in output."""
         import datetime as _dt
 
         future = (_dt.datetime.now() + _dt.timedelta(hours=1)).strftime("%H:%M")
         printed, _ = self._run_remind({"time": ["at", future], "message": "standup"})
         combined = " ".join(printed)
-        # The wall-clock string e.g. "2026-04-05 11:30" should appear
         self.assertIn("standup", combined)
 
     def test_remind_invalid_time_exits(self):
@@ -123,7 +264,6 @@ class TestCmdRemind(unittest.TestCase):
             self.assertEqual(cm.exception.code, 1)
 
     def test_remind_accumulates_multiple_oneshots(self):
-        """Two consecutive calls must append, not overwrite, the oneshots file."""
         from kim.commands import misc
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -159,8 +299,6 @@ class TestCmdRemind(unittest.TestCase):
 
 
 class TestLoadOneshotReminders(unittest.TestCase):
-    """load_oneshot_reminders filters expired entries and rewrites the file."""
-
     def _write_oneshots(self, path, oneshots):
         path.write_text(json.dumps(oneshots), encoding="utf-8")
 
@@ -179,12 +317,7 @@ class TestLoadOneshotReminders(unittest.TestCase):
         future = time.time() + 3600
         with tempfile.TemporaryDirectory() as tmpdir:
             fake = Path(tmpdir) / "oneshots.json"
-            self._write_oneshots(
-                fake,
-                [
-                    {"message": "future", "fire_at": future},
-                ],
-            )
+            self._write_oneshots(fake, [{"message": "future", "fire_at": future}])
             with patch("kim.commands.misc.ONESHOT_FILE", fake):
                 result = load_oneshot_reminders()
         self.assertEqual(len(result), 1)
@@ -210,7 +343,6 @@ class TestLoadOneshotReminders(unittest.TestCase):
         self.assertEqual(result[0]["message"], "new")
 
     def test_cleans_up_expired_from_file(self):
-        """After loading, expired entries must be removed from the file."""
         from kim.commands.misc import load_oneshot_reminders
 
         past = time.time() - 1
@@ -270,8 +402,7 @@ class TestRemoveOneshot(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             fake = Path(tmpdir) / "oneshots.json"
             with patch("kim.commands.misc.ONESHOT_FILE", fake):
-                # Must not raise
-                remove_oneshot(12345.0)
+                remove_oneshot(12345.0)  # must not raise
 
     def test_noop_when_no_match(self):
         from kim.commands.misc import remove_oneshot
@@ -281,13 +412,13 @@ class TestRemoveOneshot(unittest.TestCase):
             fake = Path(tmpdir) / "oneshots.json"
             fake.write_text(json.dumps(entries), encoding="utf-8")
             with patch("kim.commands.misc.ONESHOT_FILE", fake):
-                remove_oneshot(0.0)  # no match
+                remove_oneshot(0.0)
             result = json.loads(fake.read_text())
         self.assertEqual(len(result), 1)
 
 
 # ===========================================================================
-# cmd_list with --oneshots flag
+# cmd_list — reminders and oneshot display
 # ===========================================================================
 
 
@@ -339,7 +470,6 @@ class TestCmdListWithOneshots(unittest.TestCase):
         }
         output = self._run_list(cfg)
         self.assertIn("standup", output)
-        # cmd_list renders at-schedule reminders as "at HH:MM"
         self.assertIn("at 09:30", output)
 
     def test_list_oneshots_section_when_pending(self):
@@ -375,7 +505,7 @@ class TestCmdStatusAtScheduleDisplay(unittest.TestCase):
         printed = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fake_pid = Path(tmpdir) / "kim.pid"  # does not exist → "stopped"
+            fake_pid = Path(tmpdir) / "kim.pid"
 
             with patch.object(daemon_mod, "load_config", return_value=cfg):
                 with patch.object(daemon_mod, "PID_FILE", fake_pid):
@@ -425,7 +555,6 @@ class TestCmdStatusAtScheduleDisplay(unittest.TestCase):
         ]
         output = self._run_status(reminders)
         self.assertIn("paused", output)
-        # Should not appear in active section
         self.assertIn("Disabled", output)
 
 
@@ -435,11 +564,7 @@ class TestCmdStatusAtScheduleDisplay(unittest.TestCase):
 
 
 class TestReloadConfig(unittest.TestCase):
-    """_reload_config must add new reminders, remove deleted/disabled ones."""
-
     def _make_scheduler(self, initial_reminders):
-        from kim.scheduler import KimScheduler
-
         cfg = {"reminders": initial_reminders}
         return KimScheduler(cfg, lambda r: None)
 
@@ -456,11 +581,10 @@ class TestReloadConfig(unittest.TestCase):
             ]
         }
         with patch("kim.commands.daemon.load_config", return_value=new_cfg):
-            result = _reload_config(
+            _reload_config(
                 sched,
                 {"reminders": [{"name": "old", "interval": "30m", "enabled": True}]},
             )
-
         self.assertIn("new", sched._live)
 
     def test_deleted_reminder_removed_from_live(self):
@@ -472,11 +596,7 @@ class TestReloadConfig(unittest.TestCase):
                 {"name": "keep", "interval": "1h", "enabled": True},
             ]
         )
-        new_cfg = {
-            "reminders": [
-                {"name": "keep", "interval": "1h", "enabled": True},
-            ]
-        }
+        new_cfg = {"reminders": [{"name": "keep", "interval": "1h", "enabled": True}]}
         old_cfg = {
             "reminders": [
                 {"name": "todelete", "interval": "30m", "enabled": True},
@@ -485,7 +605,6 @@ class TestReloadConfig(unittest.TestCase):
         }
         with patch("kim.commands.daemon.load_config", return_value=new_cfg):
             _reload_config(sched, old_cfg)
-
         self.assertNotIn("todelete", sched._live)
         self.assertIn("keep", sched._live)
 
@@ -493,23 +612,12 @@ class TestReloadConfig(unittest.TestCase):
         from kim.commands.daemon import _reload_config
 
         sched = self._make_scheduler(
-            [
-                {"name": "r", "interval": "30m", "enabled": True},
-            ]
+            [{"name": "r", "interval": "30m", "enabled": True}]
         )
-        new_cfg = {
-            "reminders": [
-                {"name": "r", "interval": "30m", "enabled": False},
-            ]
-        }
-        old_cfg = {
-            "reminders": [
-                {"name": "r", "interval": "30m", "enabled": True},
-            ]
-        }
+        new_cfg = {"reminders": [{"name": "r", "interval": "30m", "enabled": False}]}
+        old_cfg = {"reminders": [{"name": "r", "interval": "30m", "enabled": True}]}
         with patch("kim.commands.daemon.load_config", return_value=new_cfg):
             _reload_config(sched, old_cfg)
-
         self.assertNotIn("r", sched._live)
 
     def test_returns_new_config(self):
@@ -569,7 +677,6 @@ class TestSanitizeReminder(unittest.TestCase):
             self.assertEqual(result.get("urgency"), u)
 
     def test_enabled_must_be_bool(self):
-        # string "true" should be rejected — only actual bool
         r = {"name": "x", "interval": "30m", "enabled": "true"}
         result = self._sanitize(r)
         self.assertNotIn("enabled", result)
@@ -633,8 +740,7 @@ class TestCmdExport(unittest.TestCase):
         r = [{"name": "standup", "at": "09:30", "enabled": True}]
         output = self._run_export(r, "json")
         data = json.loads(output)
-        reminder = data["reminders"][0]
-        self.assertEqual(reminder.get("at"), "09:30")
+        self.assertEqual(data["reminders"][0].get("at"), "09:30")
 
     def test_export_to_file(self):
         r = [{"name": "x", "interval": "1h", "enabled": True}]
@@ -759,8 +865,6 @@ class TestCmdImport(unittest.TestCase):
         self.assertIn("imported", names)
 
     def test_merge_does_not_duplicate_existing_name(self):
-        """If the imported file has the same name as an existing reminder,
-        merge must NOT add a duplicate."""
         existing = {
             "reminders": [
                 {
@@ -902,31 +1006,21 @@ class TestFindAsset(unittest.TestCase):
 
 
 class TestNotificationsSoundGuard(unittest.TestCase):
-    """_notify_windows must not play a sound when sound=False, regardless of
-    sound_file being set."""
-
     def test_sound_false_no_play(self):
-        """With sound=False, play_sound must not be called even if sound_file is set."""
         from kim import notifications
+        import inspect
 
-        with patch.object(notifications, "play_sound_file") as mock_play:
-            with patch("winsound.MessageBeep", create=True) as mock_beep:
-                # Directly test the guard logic in source
-                import inspect
-
-                src = inspect.getsource(notifications._notify_windows)
-                # The old broken guard: `if sound or sound_file:`
-                # The correct guard:    `if sound:`
-                self.assertNotIn(
-                    "if sound or sound_file:",
-                    src,
-                    "_notify_windows must not use 'if sound or sound_file' — use 'if sound'",
-                )
-                self.assertIn(
-                    "if sound:",
-                    src,
-                    "_notify_windows must guard sound playback with 'if sound:'",
-                )
+        src = inspect.getsource(notifications._notify_windows)
+        self.assertNotIn(
+            "if sound or sound_file:",
+            src,
+            "_notify_windows must not use 'if sound or sound_file' — use 'if sound'",
+        )
+        self.assertIn(
+            "if sound:",
+            src,
+            "_notify_windows must guard sound playback with 'if sound:'",
+        )
 
 
 # ===========================================================================
@@ -935,15 +1029,11 @@ class TestNotificationsSoundGuard(unittest.TestCase):
 
 
 class TestCmdStartAtScheduleDisplay(unittest.TestCase):
-    """When the daemon starts in supervised mode, it prints each reminder with
-    its schedule.  At-time reminders must show 'daily at HH:MM'."""
-
     def test_at_reminder_shown_as_daily_at(self):
         import inspect
         from kim.commands import daemon as daemon_mod
 
         src = inspect.getsource(daemon_mod.cmd_start)
-        # The banner loop must handle the 'at' key
         self.assertIn(
             "daily at",
             src,
@@ -983,24 +1073,19 @@ class TestParseIntervalEdgeCases(unittest.TestCase):
         self.assertEqual(self._parse(-1), 1800)
 
     def test_negative_string_defaults(self):
-        # "-5m" has no unit suffix after stripping leading '-'
         self.assertEqual(self._parse("-5m"), 1800)
 
     def test_very_large_minutes(self):
-        # 1440m = 1 day = 86400s
         self.assertEqual(self._parse("1440m"), 86400)
 
     def test_fractional_int_truncated(self):
-        # floats round down — 1.5 minutes = 1 → default (0 is invalid)
+        # parse_interval(1.5) = 1.5 * 60 = 90.0 — valid, must not raise
         result = self._parse(1.5)
-        # 1.5 should either give 90s or default; either way it must not raise
         self.assertIsInstance(result, (int, float))
 
     def test_whitespace_around_value(self):
-        # "  30m  " — core likely strips in parse; must not crash
         try:
             result = self._parse("  30m  ")
-            # If it parses, must give correct result
             self.assertIn(result, (1800, 1800))
         except Exception:
             pass  # acceptable to raise on whitespace
@@ -1046,7 +1131,6 @@ class TestParseDatetimeEdgeCases(unittest.TestCase):
             parse_datetime(["at"])
 
     def test_365_days_ok(self):
-        """Exactly 365 days should be accepted (boundary)."""
         before = time.time()
         result = self._parse(["365d"])
         self.assertAlmostEqual(result, before + 365 * 86400, delta=5)
@@ -1064,18 +1148,13 @@ class TestParseDatetimeEdgeCases(unittest.TestCase):
 
 
 class TestSchedulerAtReminderReschedule(unittest.TestCase):
-    """KimScheduler must reschedule an at-time reminder for the NEXT day after
-    firing it, not leave it cancelled."""
-
     def test_rescheduled_after_fire(self):
-        from kim.scheduler import KimScheduler
         import heapq
 
         config = {"reminders": [{"name": "daily", "at": "10:00", "enabled": True}]}
         fired = []
         sched = KimScheduler(config, lambda r: fired.append(r))
 
-        # Force the event to fire now
         event = sched._live["daily"]
         event.fire_at = time.time() - 1
         sched._heap = [event]
@@ -1084,11 +1163,9 @@ class TestSchedulerAtReminderReschedule(unittest.TestCase):
         sched._fire_due_events()
 
         self.assertEqual(len(fired), 1)
-        # After firing, must still be in _live with a future timestamp
         self.assertIn("daily", sched._live)
         new_event = sched._live["daily"]
         self.assertGreater(new_event.fire_at, time.time())
-        # Must be rescheduled in the future (next occurrence of this at-time)
 
 
 # ===========================================================================
@@ -1098,22 +1175,15 @@ class TestSchedulerAtReminderReschedule(unittest.TestCase):
 
 class TestSchedulerAtReminderTimezone(unittest.TestCase):
     def test_reminder_with_tz_field_loads(self):
-        """Reminder with 'timezone' key must load without error."""
-        from kim.scheduler import KimScheduler
-
         config = {
             "reminders": [
                 {"name": "standup", "at": "09:00", "timezone": "UTC", "enabled": True}
             ]
         }
         sched = KimScheduler(config, lambda r: None)
-        # Should be in _live (timezone-aware reminders still schedule for future)
         self.assertIn("standup", sched._live)
 
     def test_invalid_timezone_does_not_crash(self):
-        """Unknown timezone name must not crash the scheduler — falls back to local."""
-        from kim.scheduler import KimScheduler
-
         config = {
             "reminders": [
                 {
@@ -1124,7 +1194,6 @@ class TestSchedulerAtReminderTimezone(unittest.TestCase):
                 }
             ]
         }
-        # Must not raise — may or may not add to _live
         try:
             KimScheduler(config, lambda r: None)
         except Exception as e:
@@ -1132,7 +1201,7 @@ class TestSchedulerAtReminderTimezone(unittest.TestCase):
 
 
 # ===========================================================================
-# cmd_validate — name required
+# cmd_validate — required fields
 # ===========================================================================
 
 
