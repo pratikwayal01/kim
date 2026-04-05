@@ -758,3 +758,5 @@ def cmd_uninstall(args):
 
     print(f"\n{CHECK} kim has been uninstalled.")
     print("Thank you for using kim!")
+    if system == "Windows":
+        print("  (Open a new terminal for the change to take effect.)")
