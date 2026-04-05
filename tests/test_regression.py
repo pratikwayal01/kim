@@ -1704,21 +1704,19 @@ class TestCmdValidateAcceptsAtReminders(unittest.TestCase):
 
 
 class TestUninstallLogHandlerClose(unittest.TestCase):
-    """cmd_uninstall must close handlers on the 'kim' named logger, not just root."""
+    """_close_log_handles must close handlers on the 'kim' named logger and root."""
 
     def test_kim_logger_handlers_closed(self):
-        """After the log-close block runs, the 'kim' logger must have no handlers."""
-        import logging
+        """The log-close helper must explicitly close the 'kim' named logger."""
+        import inspect
         from kim import selfupdate
 
-        import inspect
-
-        src = inspect.getsource(selfupdate.cmd_uninstall)
-        # Must iterate over ("kim", "") or equivalent to cover the named logger
+        # Logic is in the _close_log_handles helper, called from cmd_uninstall.
+        src = inspect.getsource(selfupdate._close_log_handles)
         self.assertIn(
             '"kim"',
             src,
-            "cmd_uninstall must explicitly close the 'kim' named logger handlers",
+            "_close_log_handles must explicitly close the 'kim' named logger handlers",
         )
 
     def test_root_logger_handlers_closed(self):
@@ -1726,12 +1724,11 @@ class TestUninstallLogHandlerClose(unittest.TestCase):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
-        # The loop covers root by including "" or by iterating both names
+        src = inspect.getsource(selfupdate._close_log_handles)
         self.assertIn(
             '""',
             src,
-            "cmd_uninstall must also close root logger ('') handlers",
+            "_close_log_handles must also close root logger ('') handlers",
         )
 
 
@@ -1746,17 +1743,18 @@ class TestUninstallLogHandlerClose(unittest.TestCase):
 
 
 class TestUninstallDeferredExe(unittest.TestCase):
-    """kim.exe must be deferred, not directly unlinked."""
+    """kim.exe must be deferred, not directly unlinked (for script/binary installs)."""
 
     def test_deferred_exe_variable_exists(self):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
+        # Logic lives in _uninstall_script_or_binary helper.
+        src = inspect.getsource(selfupdate._uninstall_script_or_binary)
         self.assertIn(
             "deferred_exe",
             src,
-            "cmd_uninstall must use a deferred_exe variable for .exe removal",
+            "_uninstall_script_or_binary must use a deferred_exe variable for .exe removal",
         )
 
     def test_bat_not_in_binary_candidates_on_windows(self):
@@ -1765,7 +1763,7 @@ class TestUninstallDeferredExe(unittest.TestCase):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
+        src = inspect.getsource(selfupdate._uninstall_script_or_binary)
         # The Windows branch of binary_candidates must be a no-op (pass).
         self.assertIn(
             "deferred",
@@ -1785,20 +1783,11 @@ class TestUninstallDeferredExe(unittest.TestCase):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
-        self.assertIn(
-            "deferred_exe",
-            src,
-        )
-        self.assertIn(
-            "deferred_bat",
-            src,
-        )
+        src = inspect.getsource(selfupdate._uninstall_script_or_binary)
+        self.assertIn("deferred_exe", src)
+        self.assertIn("deferred_bat", src)
         # Both must feed the same deferred_files list
-        self.assertIn(
-            "deferred_files",
-            src,
-        )
+        self.assertIn("deferred_files", src)
 
 
 # ---------------------------------------------------------------------------
@@ -1817,19 +1806,20 @@ class TestUninstallDeferredExe(unittest.TestCase):
 class TestUninstallKimLogExplicitDelete(unittest.TestCase):
     """The deferred PS script must explicitly delete kim.log before rmdir."""
 
-    def _get_uninstall_src(self):
+    def _get_deferred_src(self):
         import inspect
         from kim import selfupdate
 
-        return inspect.getsource(selfupdate.cmd_uninstall)
+        # The deferred PS logic lives in _remove_kimdir_deferred_windows.
+        return inspect.getsource(selfupdate._remove_kimdir_deferred_windows)
 
     def test_kim_log_path_in_deferred_ps_block(self):
         """The deferred PowerShell block must reference 'kim.log' explicitly."""
-        src = self._get_uninstall_src()
+        src = self._get_deferred_src()
         self.assertIn(
             "kim.log",
             src,
-            "cmd_uninstall deferred PS block must explicitly remove kim.log",
+            "_remove_kimdir_deferred_windows must explicitly remove kim.log",
         )
 
     def test_log_file_removed_before_rmdir(self):
@@ -1837,19 +1827,19 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
+        src = inspect.getsource(selfupdate._remove_kimdir_deferred_windows)
         # kim.log retry uses $j; rmdir retry uses $i — find both
         log_loop_pos = src.find("$j=0;$j -lt 10")
         rmdir_loop_pos = src.find("$i=0;$i -lt 5")
         self.assertGreater(
             log_loop_pos,
             0,
-            "kim.log retry loop ($j) not found in cmd_uninstall",
+            "kim.log retry loop ($j) not found in _remove_kimdir_deferred_windows",
         )
         self.assertGreater(
             rmdir_loop_pos,
             0,
-            "rmdir retry loop ($i) not found in cmd_uninstall",
+            "rmdir retry loop ($i) not found in _remove_kimdir_deferred_windows",
         )
         self.assertLess(
             log_loop_pos,
@@ -1863,7 +1853,7 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
         import inspect
         from kim import selfupdate
 
-        src = inspect.getsource(selfupdate.cmd_uninstall)
+        src = inspect.getsource(selfupdate._remove_kimdir_deferred_windows)
         self.assertIn("kim.log", src, "Must explicitly remove kim.log")
         self.assertIn(
             "$j=0;$j -lt 10", src, "Must have kim.log retry loop (up to 10 attempts)"
@@ -1890,82 +1880,180 @@ class TestUninstallKimLogExplicitDelete(unittest.TestCase):
 class TestUninstallKillsOrphanRemindFire(unittest.TestCase):
     """cmd_uninstall must synchronously kill orphaned _remind-fire subprocesses."""
 
-    def _get_uninstall_src(self):
+    def _get_orphan_src(self):
         import inspect
         from kim import selfupdate
 
-        return inspect.getsource(selfupdate.cmd_uninstall)
+        # Logic lives in the _kill_remind_fire_orphans helper.
+        return inspect.getsource(selfupdate._kill_remind_fire_orphans)
 
     def test_remind_fire_killed_in_python(self):
-        """cmd_uninstall must synchronously kill _remind-fire processes."""
-        src = self._get_uninstall_src()
+        """The orphan-kill helper must target _remind-fire processes."""
+        src = self._get_orphan_src()
         self.assertIn(
             "_remind-fire",
             src,
-            "cmd_uninstall must kill orphaned _remind-fire subprocesses",
+            "_kill_remind_fire_orphans must kill orphaned _remind-fire subprocesses",
         )
 
     def test_windows_uses_stop_process(self):
         """On Windows, Stop-Process (PowerShell) must be used."""
-        src = self._get_uninstall_src()
+        src = self._get_orphan_src()
         self.assertIn("Stop-Process", src)
         self.assertIn("Win32_Process", src)
 
     def test_unix_uses_pkill(self):
         """On Unix, pkill must be used."""
-        src = self._get_uninstall_src()
+        src = self._get_orphan_src()
         self.assertIn("pkill", src)
 
     def test_orphan_kill_before_log_handle_close(self):
-        """Orphan kill must appear before the log handle close block."""
-        src = self._get_uninstall_src()
-        orphan_pos = src.find("_remind-fire")
-        log_close_pos = src.find("Release all log file handles")
-        self.assertGreater(orphan_pos, 0, "_remind-fire not found")
-        self.assertGreater(log_close_pos, 0, "log handle close block not found")
-        self.assertLess(
-            orphan_pos,
-            log_close_pos,
-            "Orphan kill must happen before log handle close",
-        )
-
-    def test_deferred_ps_does_not_kill_orphans(self):
-        """Orphan kill is done synchronously in Python; the deferred PS script
-        must NOT contain a separate Win32_Process kill (that's the old approach)."""
+        """cmd_uninstall must call orphan-kill before log handle close."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate.cmd_uninstall)
-        # The Win32_Process / Stop-Process call must appear in the Python block,
-        # not inside the ps_lines list that is passed to the deferred PS subprocess.
-        # We verify this by checking that 'ps_lines' does not contain Win32_Process.
-        # Find the ps_lines block start and confirm Win32_Process is before it.
-        ps_lines_pos = src.find("ps_lines = ")
-        win32_pos = src.find("Win32_Process")
-        self.assertGreater(ps_lines_pos, 0)
-        self.assertGreater(win32_pos, 0)
+        orphan_pos = src.find("_kill_remind_fire_orphans")
+        log_close_pos = src.find("_close_log_handles")
+        self.assertGreater(
+            orphan_pos, 0, "_kill_remind_fire_orphans not found in cmd_uninstall"
+        )
+        self.assertGreater(
+            log_close_pos, 0, "_close_log_handles not found in cmd_uninstall"
+        )
         self.assertLess(
-            win32_pos,
-            ps_lines_pos,
-            "Win32_Process must be in the Python block, not inside ps_lines",
+            orphan_pos,
+            log_close_pos,
+            "_kill_remind_fire_orphans must be called before _close_log_handles",
+        )
+
+    def test_deferred_ps_does_not_kill_orphans(self):
+        """Orphan kill is done synchronously in Python via a helper; the deferred
+        PS script (_remove_kimdir_deferred_windows) must NOT contain Win32_Process."""
+        import inspect
+        from kim import selfupdate
+
+        deferred_src = inspect.getsource(selfupdate._remove_kimdir_deferred_windows)
+        self.assertNotIn(
+            "Win32_Process",
+            deferred_src,
+            "Deferred PS (kimdir removal) must not kill orphans — that is Python's job",
         )
 
     def test_stop_process_used_to_terminate(self):
-        """The deferred PS script must use Stop-Process to kill orphans."""
-        src = self._get_uninstall_src()
+        """The orphan-kill helper must use Stop-Process."""
+        src = self._get_orphan_src()
         self.assertIn(
             "Stop-Process",
             src,
-            "Deferred PS script must use Stop-Process to kill orphaned processes",
+            "_kill_remind_fire_orphans must use Stop-Process to kill orphaned processes",
         )
 
     def test_wmi_used_to_find_by_commandline(self):
-        """The deferred PS script must use WMI to find processes by CommandLine."""
-        src = self._get_uninstall_src()
+        """The orphan-kill helper must use WMI to find processes by CommandLine."""
+        src = self._get_orphan_src()
         self.assertIn(
             "Win32_Process",
             src,
-            "Deferred PS script must use Win32_Process to find by CommandLine",
+            "_kill_remind_fire_orphans must use Win32_Process to find by CommandLine",
+        )
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — pip uninstall delegates to pip (v4.3.0)
+# ---------------------------------------------------------------------------
+class TestPipUninstallDelegatesToPip(unittest.TestCase):
+    """When install_type is 'pip', cmd_uninstall must delegate binary removal
+    to `pip uninstall kim-reminder -y` rather than trying to delete kim.exe
+    or kim.bat itself.
+
+    OLD broken behaviour: cmd_uninstall tried to delete kim.exe (the running
+    process on Windows) directly, yielding WinError 5, and deleted kim.bat
+    while cmd.exe was still executing it.
+
+    NEW correct behaviour: pip owns pip-installed files; we call pip to remove
+    them.  We only touch ~/.kim/ user data (which pip doesn't know about).
+    """
+
+    def _get_selfupdate_src(self):
+        import inspect
+        from kim import selfupdate
+
+        return inspect.getsource(selfupdate)
+
+    def test_pip_path_calls_pip_uninstall(self):
+        """_uninstall_pip must invoke pip uninstall kim-reminder."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn("pip", src)
+        self.assertIn("uninstall", src)
+        self.assertIn("kim-reminder", src)
+
+    def test_pip_path_does_not_delete_exe_directly(self):
+        """_uninstall_pip must NOT contain direct exe/bat deletion logic.
+        It delegates all binary removal to pip itself."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertNotIn("deferred_exe", src)
+        self.assertNotIn("deferred_bat", src)
+        # Must not call os.unlink, shutil.rmtree, or Path.unlink on binaries
+        self.assertNotIn("os.unlink", src)
+        self.assertNotIn(".unlink(", src)
+        self.assertNotIn("shutil.rmtree", src)
+        # Must not use shutil.which to locate the binary for deletion
+        self.assertNotIn("shutil.which", src)
+
+    def test_cmd_uninstall_dispatches_on_install_type(self):
+        """cmd_uninstall must call _detect_install_type and branch on 'pip'."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate.cmd_uninstall)
+        self.assertIn("_detect_install_type", src)
+        self.assertIn("pip", src)
+
+    def test_uninstall_pip_uses_sys_executable(self):
+        """pip uninstall must be invoked via sys.executable -m pip to target
+        the correct Python environment."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn("sys.executable", src)
+
+    def test_uninstall_pip_removes_kimdir(self):
+        """_uninstall_pip must call _remove_kimdir to clean up user data."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn("_remove_kimdir", src)
+
+    def test_pip_uninstall_called_with_subprocess(self):
+        """_uninstall_pip must run pip as a subprocess (not importlib)."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn("subprocess.run", src)
+
+    def test_helper_functions_exist(self):
+        """Refactored helpers must exist as top-level functions."""
+        from kim import selfupdate
+
+        self.assertTrue(callable(getattr(selfupdate, "_remove_os_service", None)))
+        self.assertTrue(
+            callable(getattr(selfupdate, "_kill_remind_fire_orphans", None))
+        )
+        self.assertTrue(callable(getattr(selfupdate, "_close_log_handles", None)))
+        self.assertTrue(callable(getattr(selfupdate, "_remove_kimdir", None)))
+        self.assertTrue(callable(getattr(selfupdate, "_uninstall_pip", None)))
+        self.assertTrue(
+            callable(getattr(selfupdate, "_uninstall_script_or_binary", None))
         )
 
 

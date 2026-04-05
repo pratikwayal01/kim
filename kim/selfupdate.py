@@ -491,33 +491,12 @@ def cmd_selfupdate(args):
 
 
 # ---------------------------------------------------------------------------
-# Uninstall
+# Uninstall helpers
 # ---------------------------------------------------------------------------
 
 
-def cmd_uninstall(args):
-    print("\033[1;31m=== Uninstall kim ===\033[0m\n")
-
-    if PID_FILE.exists():
-        print("kim is running. Stop it first with 'kim stop'")
-        sys.exit(1)
-
-    try:
-        confirm = (
-            input("This will remove kim data and the binary. Continue? (Y/N): ")
-            .strip()
-            .lower()
-        )
-    except (EOFError, KeyboardInterrupt):
-        print("\nUninstall cancelled.")
-        return
-
-    if confirm != "y":
-        print("Uninstall cancelled.")
-        return
-
-    system = platform.system()
-
+def _remove_os_service(system):
+    """Remove the OS-level autostart service/task if present."""
     if system == "Linux":
         try:
             subprocess.run(
@@ -559,16 +538,15 @@ def cmd_uninstall(args):
         except FileNotFoundError:
             print("No scheduled task found (or already removed).")
 
-    # --- Terminate orphaned one-shot reminder subprocesses --------------------
-    # 'kim remind' spawns background subprocesses (python kim.py _remind-fire).
-    # If the daemon was stopped while they were sleeping they remain alive,
-    # holding their own handle on kim.log.  Since the user is uninstalling,
-    # these reminders will never fire anyway — kill them now so the log handle
-    # is released before we attempt to delete KIM_DIR.
-    # Unix processes don't hold file locks after the parent exits, but we
-    # terminate them there too for a clean uninstall.
+
+def _kill_remind_fire_orphans(system):
+    """Synchronously kill any lingering _remind-fire subprocesses.
+
+    These hold their own handle on kim.log and must be terminated before we
+    attempt to delete KIM_DIR.  Best-effort — failures are silently ignored.
+    """
     try:
-        result = subprocess.run(
+        subprocess.run(
             [
                 "powershell",
                 "-NoProfile",
@@ -579,22 +557,20 @@ def cmd_uninstall(args):
                 "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
             ]
             if system == "Windows"
-            else [
-                "pkill",
-                "-f",
-                "_remind-fire",
-            ],
+            else ["pkill", "-f", "_remind-fire"],
             capture_output=True,
             timeout=10,
         )
     except Exception:
         pass
-    # --------------------------------------------------------------------------
 
-    # --- Release all log file handles before touching KIM_DIR ----------------
-    # Best-effort: close Python-level handlers so they flush; on Windows the OS
-    # file lock on kim.log will not be released until this process exits, so
-    # KIM_DIR removal is deferred (see below).
+
+def _close_log_handles():
+    """Close all Python-level log file handles held by this process.
+
+    On Windows the OS-level file lock is not released until the process fully
+    exits, but closing the handler flushes pending writes and is good practice.
+    """
     for logger_name in ("kim", ""):
         _lg = logging.getLogger(logger_name)
         for handler in _lg.handlers[:]:
@@ -607,7 +583,7 @@ def cmd_uninstall(args):
     try:
         import kim.core as _core
 
-        if hasattr(_core, "_handler"):
+        if hasattr(_core, "_handler") and _core._handler is not None:
             try:
                 _core._handler.close()
             except Exception:
@@ -615,8 +591,111 @@ def cmd_uninstall(args):
             _core._handler = None
     except Exception:
         pass
-    # --------------------------------------------------------------------------
 
+
+def _remove_kimdir_deferred_windows():
+    """Spawn a hidden PowerShell process to remove KIM_DIR after this process exits.
+
+    On Windows, kim.log is locked by the RotatingFileHandler for the lifetime of
+    this process.  The deferred script waits for the process to exit, retries
+    deleting kim.log (up to 10 times, 1 s apart), then removes the now-empty
+    ~/.kim directory (up to 5 retries).
+    """
+    d = str(KIM_DIR).replace("'", "''")
+    log_file = str(KIM_DIR / "kim.log").replace("'", "''")
+    ps_script = "; ".join(
+        [
+            "Start-Sleep 3",
+            # Step 1: delete kim.log once the process releases the handle.
+            f"for($j=0;$j -lt 10;$j++){{"
+            f"if(Test-Path '{log_file}'){{"
+            f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue;"
+            f"if(-not(Test-Path '{log_file}')){{break}};Start-Sleep 1}}else{{break}}}}",
+            # Step 2: remove the now-empty directory.
+            f"for($i=0;$i -lt 5;$i++){{"
+            f"if(Test-Path '{d}'){{"
+            f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"
+            f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}",
+        ]
+    )
+    try:
+        subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                ps_script,
+            ],
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+def _remove_kimdir(system):
+    """Remove ~/.kim user-data directory.
+
+    On Windows, kim.log is OS-locked for the lifetime of this process, so the
+    actual deletion is deferred to a background PowerShell subprocess that runs
+    after we exit.  On other platforms we can delete immediately.
+    """
+    if not KIM_DIR.exists():
+        return
+    if system == "Windows":
+        _remove_kimdir_deferred_windows()
+    else:
+        try:
+            shutil.rmtree(KIM_DIR)
+            print(f"Removed {KIM_DIR}")
+        except PermissionError as e:
+            print(f"Could not remove {KIM_DIR}: {e}")
+            print(
+                "  Close any programs using files in that folder, then delete it manually."
+            )
+
+
+def _uninstall_pip(system):
+    """Remove a pip-installed kim-reminder package.
+
+    Delegates binary/script removal entirely to pip (which handles kim.exe and
+    kim.bat cleanly without the locked-file issues we'd get doing it ourselves),
+    then removes ~/.kim/ user data separately.
+    """
+    print("Detected pip install — running: pip uninstall kim-reminder -y")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "uninstall", "kim-reminder", "-y"],
+            timeout=120,
+        )
+        if result.returncode == 0:
+            print(f"{CHECK} pip uninstall succeeded.")
+        else:
+            print(
+                "pip uninstall returned a non-zero exit code.\n"
+                "You can finish manually with:  pip uninstall kim-reminder -y"
+            )
+    except FileNotFoundError:
+        print("pip not found.  Finish manually with:  pip uninstall kim-reminder -y")
+    except subprocess.TimeoutExpired:
+        print(
+            "pip uninstall timed out.  Finish manually with:  pip uninstall kim-reminder -y"
+        )
+
+    _remove_kimdir(system)
+
+
+def _uninstall_script_or_binary(system):
+    """Remove a script or standalone-binary install of kim.
+
+    Handles direct file deletion with Windows deferred-deletion where needed.
+    """
     binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
     if system == "Darwin":
         binary_candidates += [
@@ -624,21 +703,13 @@ def cmd_uninstall(args):
             Path("/opt/homebrew/bin/kim"),
         ]
     elif system == "Windows":
-        # On Windows all binaries are deferred (bat shim + exe); nothing goes in
-        # binary_candidates here — direct deletion of kim.bat while cmd.exe is
-        # still executing it causes "The batch file cannot be found." on exit.
+        # On Windows all binaries are deferred — direct deletion of kim.bat
+        # while cmd.exe is still executing it causes "The batch file cannot be
+        # found." on exit, and kim.exe may still be the running process.
         pass
 
-    # On Windows, shutil.which("kim") may resolve to the currently-executing
-    # kim.bat.  Deleting it while cmd.exe is running it causes the
-    # "The batch file cannot be found." error after the process exits.
-    # Similarly, kim.exe (pip-installed entry point) is the running process
-    # itself, so os.unlink() on it yields WinError 5 (Access Denied).
-    # KIM_DIR itself cannot be removed because kim.log is locked by this process.
-    # All three are collected for deferred deletion after process exit.
     deferred_bat = None
     deferred_exe = None
-    deferred_kimdir = None
     _which = shutil.which("kim")
     if _which:
         which_path = Path(_which).resolve()
@@ -649,20 +720,14 @@ def cmd_uninstall(args):
         else:
             binary_candidates.append(which_path)
 
-    # Also check the pip Scripts exe directly — it won't appear via which() when
-    # the .bat shim is the PATH entry, but it still needs deferred deletion.
-    # Also fall back to the known bat shim path in case which() didn't find it.
     if system == "Windows":
-        import sys as _sys
-
         if deferred_bat is None:
             _fallback_bat = Path.home() / ".local" / "bin" / "kim.bat"
             if _fallback_bat.exists():
                 deferred_bat = _fallback_bat
-
         exe_candidates = [
-            Path(_sys.executable).parent / "Scripts" / "kim.exe",
-            Path(_sys.executable).parent.parent / "Scripts" / "kim.exe",
+            Path(sys.executable).parent / "Scripts" / "kim.exe",
+            Path(sys.executable).parent.parent / "Scripts" / "kim.exe",
             Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
         ]
         for _exe in exe_candidates:
@@ -686,52 +751,25 @@ def cmd_uninstall(args):
                     continue
             print(f"Removed {path}")
 
-    # Remove KIM_DIR — on non-Windows we can do it now; on Windows the log file
-    # handle is held by this process so we must defer it like the binaries.
-    if KIM_DIR.exists():
-        if system == "Windows":
-            deferred_kimdir = KIM_DIR
-        else:
-            try:
-                shutil.rmtree(KIM_DIR)
-                print(f"Removed {KIM_DIR}")
-            except PermissionError as e:
-                print(f"Could not remove {KIM_DIR}: {e}")
-                print(
-                    "  Close any programs using files in that folder, then delete it manually."
-                )
+    _remove_kimdir(system)
 
-    # Deferred deletion: spawns a hidden cmd that waits ~2 s (ping trick) then
-    # removes all locked paths.  By then this process has exited and all file
-    # handles are released by the OS.
+    # Deferred deletion for Windows bat/exe files.
     deferred_files = [p for p in (deferred_bat, deferred_exe) if p and p.exists()]
-    if deferred_files or deferred_kimdir:
-        # Use PowerShell for the deferred cleanup — cleaner quoting and retry logic.
-        # Start-Sleep 3 gives this process time to fully exit and release kim.log.
-        # By this point all _remind-fire orphans have already been killed above,
-        # so the only remaining lock on kim.log is this process's own handler.
+    if deferred_files:
+        d = str(KIM_DIR).replace("'", "''") if KIM_DIR.exists() else None
+        log_file = str(KIM_DIR / "kim.log").replace("'", "''")
         ps_lines = ["Start-Sleep 3"]
-        if deferred_kimdir:
-            d = str(deferred_kimdir).replace("'", "''")
-            log_file = str(deferred_kimdir / "kim.log").replace("'", "''")
-            # Step 1: retry deleting kim.log up to 10 times with 1s gaps.
-            # It is locked by this process's RotatingFileHandler; the handle
-            # is released once the Python process fully exits (after the
-            # Start-Sleep above).  SilentlyContinue so a still-locked attempt
-            # doesn't abort the script.
-            ps_lines.append(
+        if d:
+            ps_lines += [
                 f"for($j=0;$j -lt 10;$j++){{"
                 f"if(Test-Path '{log_file}'){{"
                 f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue;"
-                f"if(-not(Test-Path '{log_file}')){{break}};Start-Sleep 1}}else{{break}}}}"
-            )
-            # Step 2: now that kim.log is gone, retry rmdir up to 5 times.
-            ps_lines.append(
+                f"if(-not(Test-Path '{log_file}')){{break}};Start-Sleep 1}}else{{break}}}}",
                 f"for($i=0;$i -lt 5;$i++){{"
                 f"if(Test-Path '{d}'){{"
                 f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"
-                f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}"
-            )
+                f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}",
+            ]
         for p in deferred_files:
             ps = str(p).replace("'", "''")
             ps_lines.append(f"Remove-Item '{ps}' -Force -ErrorAction SilentlyContinue")
@@ -754,7 +792,52 @@ def cmd_uninstall(args):
                 stderr=subprocess.DEVNULL,
             )
         except Exception:
-            pass  # non-fatal
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Uninstall — public command
+# ---------------------------------------------------------------------------
+
+
+def cmd_uninstall(args):
+    print("\033[1;31m=== Uninstall kim ===\033[0m\n")
+
+    if PID_FILE.exists():
+        print("kim is running. Stop it first with 'kim stop'")
+        sys.exit(1)
+
+    try:
+        confirm = (
+            input("This will remove kim and its data. Continue? (Y/N): ")
+            .strip()
+            .lower()
+        )
+    except (EOFError, KeyboardInterrupt):
+        print("\nUninstall cancelled.")
+        return
+
+    if confirm != "y":
+        print("Uninstall cancelled.")
+        return
+
+    system = platform.system()
+    install_type = _detect_install_type()
+
+    # 1. Remove OS autostart service/task.
+    _remove_os_service(system)
+
+    # 2. Kill orphaned _remind-fire subprocesses (hold handles on kim.log).
+    _kill_remind_fire_orphans(system)
+
+    # 3. Close this process's log file handles (best-effort flush).
+    _close_log_handles()
+
+    # 4. Remove binaries and ~/.kim/ user data.
+    if install_type == "pip":
+        _uninstall_pip(system)
+    else:
+        _uninstall_script_or_binary(system)
 
     print(f"\n{CHECK} kim has been uninstalled.")
     print("Thank you for using kim!")
