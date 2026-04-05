@@ -139,7 +139,7 @@ def cmd_remove(args):
     if ONESHOT_FILE.exists():
         try:
             oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             oneshots = []
         now = _time.time()
         pending = [(i, o) for i, o in enumerate(oneshots) if o.get("fire_at", 0) > now]
@@ -278,6 +278,13 @@ def cmd_update(args):
                     r["timezone"] = tz_name
             elif args.interval is not None:
                 # Switch from at-time to interval schedule
+                from ..scheduler import KimScheduler
+
+                if KimScheduler._parse_interval({"interval": args.interval}) is None:
+                    print(
+                        f"Error: invalid interval {args.interval!r}. Use e.g. 30m, 1h, 1d."
+                    )
+                    sys.exit(1)
                 r.pop("at", None)
                 r.pop("timezone", None)
                 r["interval"] = args.interval

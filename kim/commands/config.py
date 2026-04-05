@@ -161,6 +161,14 @@ def cmd_validate(args):
                 f"Error: Reminder '{r.get('name')}' missing schedule ('interval' or 'at') field."
             )
             sys.exit(1)
+        if r.get("at"):
+            import re as _re
+
+            if not _re.fullmatch(r"(\d{1,2}):(\d{2})", str(r["at"]).strip()):
+                print(
+                    f"Error: Reminder '{r.get('name')}' has invalid 'at' value {r['at']!r}. Use HH:MM format."
+                )
+                sys.exit(1)
         interval_val = r.get("interval") or r.get("interval_minutes")
         if (
             interval_val is not None

@@ -2,6 +2,7 @@
 Miscellaneous commands: remind, slack, sound, completion.
 """
 
+import datetime as _dt
 import json
 import os
 import platform
@@ -51,6 +52,8 @@ def cmd_remind(args):
         sys.exit(1)
 
     sleep_seconds = fire_time - time.time()
+    # Guard against clock jumps producing a negative sleep duration
+    sleep_seconds = max(0.0, sleep_seconds)
 
     if sleep_seconds > 365 * 24 * 3600:
         print("Duration too large (max 365 days).")
@@ -72,8 +75,6 @@ def cmd_remind(args):
     # For absolute "at" times, also show the wall-clock time
     raw_joined = " ".join(args.time).strip().lower()
     if raw_joined.startswith("at"):
-        import datetime as _dt
-
         fire_dt = _dt.datetime.fromtimestamp(fire_time).strftime("%Y-%m-%d %H:%M")
         print(f"{CHECK} Reminder set: '{message}' at {fire_dt} (in {display})")
     else:
@@ -178,6 +179,9 @@ def cmd_remind(args):
             slack_config=slack_config if slack_config.get("enabled") else None,
         )
         log.info("One-shot reminder fired: %s", message)
+        # Remove this entry from the persisted file so it doesn't re-fire on
+        # daemon restart.
+        remove_oneshot(fire_time)
     except Exception:
         log.exception("One-shot reminder child process failed")
     finally:
@@ -212,6 +216,11 @@ def cmd_remind_fire(args):
             remaining = [o for o in oneshots if o.get("fire_at", 0) > now]
             _tmp = ONESHOT_FILE.with_suffix(".tmp")
             _tmp.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+            if platform.system() != "Windows":
+                try:
+                    os.chmod(_tmp, 0o600)
+                except OSError:
+                    pass
             _tmp.replace(ONESHOT_FILE)
         except (json.JSONDecodeError, OSError) as e:
             log.warning("Could not clean up oneshots.json after fire: %s", e)
@@ -235,6 +244,11 @@ def load_oneshot_reminders():
             try:
                 _tmp = ONESHOT_FILE.with_suffix(".tmp")
                 _tmp.write_text(json.dumps(valid, indent=2), encoding="utf-8")
+                if platform.system() != "Windows":
+                    try:
+                        os.chmod(_tmp, 0o600)
+                    except OSError:
+                        pass
                 _tmp.replace(ONESHOT_FILE)
             except OSError as e:
                 log.warning("Could not clean up expired one-shots: %s", e)
@@ -256,6 +270,11 @@ def remove_oneshot(fire_at):
         remaining = [o for o in oneshots if o.get("fire_at") != fire_at]
         _tmp = ONESHOT_FILE.with_suffix(".tmp")
         _tmp.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(_tmp, 0o600)
+            except OSError:
+                pass
         _tmp.replace(ONESHOT_FILE)
     except (json.JSONDecodeError, OSError) as e:
         log.warning("Could not update oneshots.json: %s", e)

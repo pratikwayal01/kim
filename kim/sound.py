@@ -2,6 +2,7 @@
 Sound playback and validation for kim.
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -206,6 +207,8 @@ def validate_sound_file(path: str) -> Tuple[bool, str]:
         return False, f"File not found: {path}"
     if not p.is_file():
         return False, f"Not a file: {path}"
+    if not os.access(path, os.R_OK):
+        return False, f"File is not readable: {path}"
     if p.suffix.lower() not in SUPPORTED_EXTS:
         return False, (
             f"Unrecognised extension '{p.suffix}'. "

@@ -349,11 +349,21 @@ def cmd_interactive(args):
             return
 
         title = input("Title (optional) [Reminder]: ").strip() or "Reminder"
+        urgency_input = (
+            input("Urgency (low/normal/critical) [normal]: ").strip() or "normal"
+        )
+        if urgency_input not in ("low", "normal", "critical"):
+            urgency_input = "normal"
 
         fire_dt = _dt.datetime.fromtimestamp(fire_time).strftime("%Y-%m-%d %H:%M")
 
         # Persist to oneshots.json
-        oneshot_entry = {"message": message, "title": title, "fire_at": fire_time}
+        oneshot_entry = {
+            "message": message,
+            "title": title,
+            "urgency": urgency_input,
+            "fire_at": fire_time,
+        }
         existing = []
         if ONESHOT_FILE.exists():
             try:
@@ -381,6 +391,8 @@ def cmd_interactive(args):
                 message,
                 "--title",
                 title,
+                "--urgency",
+                urgency_input,
                 "--seconds",
                 str(sleep_seconds),
             ]
@@ -405,7 +417,7 @@ def cmd_interactive(args):
                     notify(
                         title,
                         message,
-                        urgency="critical",
+                        urgency=urgency_input,
                         sound=cfg.get("sound", True),
                         sound_file=cfg.get("sound_file") or None,
                     )
@@ -456,6 +468,9 @@ def cmd_interactive(args):
                     r["interval"] = f"{int(new_interval)}m"
                 except ValueError:
                     pass
+            # If reminder previously used an at-time schedule, clear those keys
+            r.pop("at", None)
+            r.pop("timezone", None)
 
         new_title = input(f"Title [{r.get('title', '')}]: ").strip()
         if new_title:

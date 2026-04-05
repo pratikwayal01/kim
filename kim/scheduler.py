@@ -294,14 +294,6 @@ class KimScheduler:
         self._wakeup.set()
         log.info("Added one-shot reminder %r (fires at %s)", name, time.ctime(fire_at))
 
-    def update_reminder(self, reminder: dict) -> None:
-        """Update an existing reminder in place (kim update)."""
-        self.add_reminder(reminder)  # add_reminder handles replacement
-
-    def disable_reminder(self, name: str) -> bool:
-        """Disable a reminder without removing it (kim disable)."""
-        return self.remove_reminder(name)
-
     def list_reminders(self) -> List[dict]:
         """Return a snapshot of all active reminders (kim list)."""
         with self._lock:
@@ -329,9 +321,10 @@ class KimScheduler:
         """Main loop — runs in the background scheduler thread."""
         while not self._stop_flag.is_set():
             try:
-                self._wakeup.clear()
-
                 with self._lock:
+                    # Clear wakeup inside the lock so any wakeup signal set after
+                    # we read the heap but before we sleep is not lost.
+                    self._wakeup.clear()
                     # Drain cancelled events from the top of the heap
                     while self._heap and self._heap[0].cancelled:
                         heapq.heappop(self._heap)
@@ -390,18 +383,27 @@ class KimScheduler:
             is_oneshot = "_oneshot_fire_at" in event.reminder
 
             try:
-                self._notifier(event.reminder)
+                # Run notifier in a daemon thread so a slow/blocking notifier
+                # (e.g. network Slack call) does not stall the scheduler loop.
+                t = threading.Thread(
+                    target=self._notifier,
+                    args=(event.reminder,),
+                    daemon=True,
+                )
+                t.start()
             except Exception:
                 log.exception(
-                    "Notifier raised for reminder %r", event.reminder.get("name")
-                )
-
-            # Skip rescheduling for one-shot reminders
-            if is_oneshot:
-                log.debug(
-                    "One-shot reminder %r fired, not rescheduling",
+                    "Could not start notifier thread for reminder %r",
                     event.reminder.get("name"),
                 )
+
+            # Skip rescheduling for one-shot reminders; remove from _live
+            if is_oneshot:
+                name = event.reminder.get("name")
+                log.debug("One-shot reminder %r fired, not rescheduling", name)
+                with self._lock:
+                    if self._live.get(name) is event:
+                        del self._live[name]
                 continue
 
             # Re-schedule for next occurrence

@@ -9,6 +9,7 @@ import logging
 import os
 import platform
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -24,7 +25,7 @@ try:
 except OSError:
     pass
 
-VERSION = "4.5.4"
+VERSION = "4.5.5"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 try:
@@ -133,10 +134,18 @@ def load_config() -> dict:
     except json.JSONDecodeError as e:
         log.error("Invalid JSON in config file: %s", e)
         log.info("Using default config.")
+        print(
+            f"Warning: config file is corrupt (invalid JSON): {e}. Using defaults.",
+            file=sys.stderr,
+        )
         return copy.deepcopy(DEFAULT_CONFIG)
     except OSError as e:
         log.error("Error reading config file: %s", e)
         log.info("Using default config.")
+        print(
+            f"Warning: could not read config file: {e}. Using defaults.",
+            file=sys.stderr,
+        )
         return copy.deepcopy(DEFAULT_CONFIG)
 
 
@@ -151,6 +160,11 @@ def parse_interval(value) -> float:
       - "90s"        → 90 seconds
     Returns seconds as float (default 30 minutes for invalid values).
     Negative or zero intervals default to 30 minutes.
+
+    .. deprecated:: 4.5.5
+        Use ``KimScheduler._parse_interval`` instead. This top-level copy is
+        kept only for backward compatibility and may be removed in a future
+        release.
     """
     try:
         if isinstance(value, (int, float)):

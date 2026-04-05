@@ -5,6 +5,7 @@ CLI argument parsing and command dispatch for kim.
 import argparse
 import os
 import platform
+import re
 import subprocess
 import sys
 
@@ -110,8 +111,6 @@ def main():
 
         def _format_actions_usage(self, actions, groups):
             text = super()._format_actions_usage(actions, groups)
-            import re
-
             # Replace the long {start,stop,...} metavar with a short placeholder
             text = re.sub(r"\{[a-z,_-]{10,}\}", "<command>", text)
             return text
@@ -440,4 +439,4 @@ logs:   ~/.kim/kim.log""",
         cmds[args.command](args)
     else:
         parser.print_help()
-        sys.exit(1)
+        # No subcommand given — exit cleanly (not an error)

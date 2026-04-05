@@ -5,7 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.5.5] - 2026-04-05
+
+### Fixed
+- **Scheduler race condition** — `_wakeup.clear()` is now called inside the lock so a wakeup signal set between reading the heap and entering `wait()` is never lost.
+- **Scheduler: notifier now runs in a daemon thread** — a slow or blocking notifier (e.g. Slack network call) no longer stalls the scheduler loop and delays all future firings.
+- **One-shot reminders: remove from `_live` after firing** — fired one-shots are now removed from the scheduler's internal `_live` dict, preventing a memory leak for long-running daemons.
+- **One-shot fork child now calls `remove_oneshot()`** — after the Unix `os.fork()` child fires a `kim remind` one-shot, it removes its entry from `oneshots.json` so the reminder does not re-fire on the next daemon start.
+- **`oneshots.json` tmp file permissions** — all atomic writes to `oneshots.json` (via `.tmp` rename) now `chmod 0o600` the tmp file on Unix before the rename, preventing world-readable exposure.
+- **Negative `sleep_seconds` on clock jump** — `kim remind` now clamps `sleep_seconds` to `max(0.0, ...)` so a backward clock adjustment never causes `time.sleep()` to crash.
+- **`kim update --interval` now validates the value** — passing an invalid interval string (e.g. `--interval foo`) is rejected with an error message instead of silently writing bad data to config.
+- **`kim validate` now checks `at` field format** — reminders with an `at` field are validated to be in `HH:MM` format; invalid values are reported as errors.
+- **Slack webhook response body checked** — `_notify_slack_webhook` now reads the response body and logs a warning if it is not `"ok"`. `_notify_slack_bot` reads the JSON response and logs the API error if `ok` is `false`.
+- **`kim interactive` edit: clearing `at` when switching to interval** — editing a reminder to set an interval now removes any existing `at` and `timezone` keys, preventing an invalid mixed-schedule state.
+- **`kim interactive` add one-shot: urgency no longer hardcoded to `critical`** — the user is now prompted for urgency (default: `normal`), consistent with `kim remind`.
+- **`load_config` prints a warning on JSON corruption** — callers (including the daemon and CLI) now see a stderr message when the config file is invalid JSON, not just a silent log entry.
+- **`kim` (bare, no subcommand) now exits 0** — printing help is not an error condition.
+- **`sound.py`: `validate_sound_file` now checks read permission** — a file that exists but is not readable is rejected with a clear error message.
+- **`import re` moved to module level in `cli.py`** — the deferred `import re` inside `_Formatter._format_actions_usage` is now a top-level import.
+- **`import datetime` moved to module level in `misc.py`** — the deferred `import datetime as _dt` inside `cmd_remind` is now a top-level import.
+- **`cmd_remove` exception handling narrowed** — the bare `except Exception` when reading `oneshots.json` in `cmd_remove` is now `except (json.JSONDecodeError, OSError)`.
+- **Dead-code removal**: `KimScheduler.update_reminder` and `KimScheduler.disable_reminder` (thin wrappers never called externally) removed; `core.parse_interval` marked deprecated (kept for backward compatibility).
 
 ## [4.5.0] - 2026-04-05
 

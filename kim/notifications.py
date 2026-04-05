@@ -238,7 +238,11 @@ def _notify_slack_webhook(title: str, message: str, webhook_url: str) -> None:
         req = urllib.request.Request(
             webhook_url, data=data, headers={"Content-Type": "application/json"}
         )
-        urllib.request.urlopen(req, timeout=10)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8", errors="replace").strip()
+        # Slack Incoming Webhooks return "ok" on success; anything else is an error
+        if body and body != "ok":
+            log.warning("Slack webhook returned unexpected response: %r", body)
         log.debug("Slack webhook notification sent")
     except urllib.error.HTTPError as e:
         # Do NOT log webhook_url — it is a secret
@@ -277,7 +281,17 @@ def _notify_slack_bot(
                 "Authorization": f"Bearer {bot_token}",
             },
         )
-        urllib.request.urlopen(req, timeout=10)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        try:
+            result = json.loads(body)
+            if not result.get("ok"):
+                log.warning(
+                    "Slack bot API returned ok=false: %s",
+                    result.get("error", "unknown"),
+                )
+        except (json.JSONDecodeError, AttributeError):
+            log.warning("Slack bot returned non-JSON response: %r", body[:200])
         log.debug("Slack bot notification sent")
     except urllib.error.HTTPError as e:
         log.error("Slack bot HTTP error: %s %s", e.code, e.reason)
