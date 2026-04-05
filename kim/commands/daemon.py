@@ -54,11 +54,11 @@ def _spawn_detached() -> int:
     env["KIM_DAEMON"] = "1"
 
     # Build the command to re-invoke kim.
-    # sys.argv[0] may be a .py script (script install), a .exe (pip/binary),
-    # or a console_scripts wrapper.  On Windows, Popen cannot exec a .py file
-    # directly — it must be run via the Python interpreter.
+    # sys.argv[0] may be a .py script (script/source install), a .exe (pip/binary),
+    # or a console_scripts wrapper.  A .py file cannot be exec'd directly —
+    # it must be run via the Python interpreter.
     argv0 = sys.argv[0]
-    if platform.system() == "Windows" and argv0.lower().endswith(".py"):
+    if argv0.lower().endswith(".py") or not os.access(argv0, os.X_OK):
         cmd = [sys.executable] + sys.argv
     else:
         cmd = sys.argv
