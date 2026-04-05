@@ -3,8 +3,6 @@
 > Lightweight cross-platform reminder daemon for developers.  
 > No UI. Config-driven. Runs in the background.
 
-*Updated documentation.*
-
 ## Features
 
 - **Cross-platform**: Linux, macOS, Windows

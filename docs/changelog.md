@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-04-05
+
+### Added
+- **`kim remind --urgency`** — one-shot reminders now accept `--urgency low|normal|critical` (default: `normal`), matching `kim add` behaviour. Urgency is persisted to `~/.kim/oneshots.json` and correctly restored if the daemon restarts while the reminder is pending.
+
+### Fixed
+- **`kim start` daemon detection** — replaced `INVOCATION_ID` env-var check with a TTY check (`/dev/tty`). The old check caused `kim start` to block the terminal on some Linux distros because systemd inherits `INVOCATION_ID` to all child shells, not just supervised processes.
+- **`kim start` / `kim stop` messages now include PID**:
+  - `kim started. (PID 1234)`
+  - `kim is already running. (PID 1234)`
+  - `kim stopped. (PID 1234)`
+  - `kim is already stopped.`
+- **`kim remind` output consistent with `kim add`** — confirmation now uses the `✓` prefix instead of leaking the notification title into the CLI output line.
+- **`_remind-fire` hidden from usage line** — internal subcommand no longer appears in `kim` usage/help output.
+- **`--break-system-packages` added to all pip calls** — `kim self-update` and `kim uninstall` now work correctly on Arch Linux, Debian 12+, Ubuntu 23.04+, and other distros with externally managed Python environments.
+
+### Changed
+- Shell completions for bash, zsh, and fish updated to include `--urgency` for `kim remind`.
+
 ## [4.1.8] - 2026-04-05
 
 ### Fixed

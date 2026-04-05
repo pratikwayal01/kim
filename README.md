@@ -23,7 +23,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pra
 
 **pip** (all platforms — PATH must be configured manually on Windows, see below)
 ```bash
-pip install kim-reminder
+pip install --break-system-packages kim-reminder
 ```
 [![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
 
@@ -98,6 +98,9 @@ kim remind "standup" at 10:00
 kim remind "standup" at tomorrow 9am
 kim remind "call" at friday 2pm
 kim remind "deploy" at 2026-04-07 14:30 --tz America/New_York
+
+# Urgency (default: normal)
+kim remind "wake up!" in 5m --urgency critical
 ```
 
 Fires once, runs in the background, frees your terminal immediately.

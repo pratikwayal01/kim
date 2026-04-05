@@ -94,7 +94,7 @@ kim update NAME [-I INTERVAL] [--every INTERVAL] [--at HH:MM] [--tz TZ] [-t TITL
 ## One-shot Reminders
 
 ```bash
-kim remind MESSAGE TIME [...] [-t TITLE] [--tz TZ]
+kim remind MESSAGE TIME [...] [-t TITLE] [--urgency URGENCY] [--tz TZ]
 ```
 
 **TIME — relative:**
@@ -114,6 +114,8 @@ at 2026-04-06 09:00    specific date and time
 ```
 
 **Options:**
+- `-t, --title` — Notification title (default: `Reminder`)
+- `--urgency` — `low`, `normal`, `critical` (default: `normal`)
 - `--tz TZ` — IANA timezone for absolute times (default: local system timezone)
 
 **Examples:**
@@ -124,6 +126,7 @@ kim remind "deploy window opens" 2h 30m
 kim remind "standup" at 10:00
 kim remind "standup" at tomorrow 9am
 kim remind "call" at 2026-04-06 14:30 --tz America/New_York
+kim remind "wake up!" in 5m --urgency critical
 ```
 
 **Persistence:** One-shot reminders are persisted to disk (`~/.kim/oneshots.json`) and survive daemon restarts and system reboots. Expired reminders are automatically cleaned up.
