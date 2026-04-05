@@ -215,6 +215,7 @@ def _update_via_pip(latest_version: str, force: bool):
                 "-m",
                 "pip",
                 "install",
+                "--break-system-packages",
                 "--upgrade",
                 f"kim-reminder=={latest_version}",
             ],
@@ -223,7 +224,15 @@ def _update_via_pip(latest_version: str, force: bool):
         if result.returncode != 0:
             # Retry without pinned version (lets pip pick latest)
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade", "kim-reminder"],
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--break-system-packages",
+                    "--upgrade",
+                    "kim-reminder",
+                ],
                 timeout=120,
             )
         if result.returncode == 0:
@@ -231,13 +240,13 @@ def _update_via_pip(latest_version: str, force: bool):
             print("Restart your terminal or run 'kim --version' to verify.")
         else:
             print("\nPip upgrade failed. Try manually:")
-            print(f"  pip install --upgrade kim-reminder")
+            print(f"  pip install --break-system-packages --upgrade kim-reminder")
     except FileNotFoundError:
         print("pip not found. Try manually:")
-        print(f"  pip install --upgrade kim-reminder")
+        print(f"  pip install --break-system-packages --upgrade kim-reminder")
     except subprocess.TimeoutExpired:
         print("pip upgrade timed out. Try manually:")
-        print(f"  pip install --upgrade kim-reminder")
+        print(f"  pip install --break-system-packages --upgrade kim-reminder")
 
 
 def _update_script(assets: list, latest_version: str):
@@ -685,7 +694,15 @@ def _uninstall_pip(system):
         print("Detected pip install — running: pip uninstall kim-reminder -y")
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "uninstall", "kim-reminder", "-y"],
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "uninstall",
+                    "--break-system-packages",
+                    "kim-reminder",
+                    "-y",
+                ],
                 timeout=120,
             )
             if result.returncode == 0:
@@ -693,15 +710,15 @@ def _uninstall_pip(system):
             else:
                 print(
                     "pip uninstall returned a non-zero exit code.\n"
-                    "You can finish manually with:  pip uninstall kim-reminder -y"
+                    "You can finish manually with:  pip uninstall --break-system-packages kim-reminder -y"
                 )
         except FileNotFoundError:
             print(
-                "pip not found.  Finish manually with:  pip uninstall kim-reminder -y"
+                "pip not found.  Finish manually with:  pip uninstall --break-system-packages kim-reminder -y"
             )
         except subprocess.TimeoutExpired:
             print(
-                "pip uninstall timed out.  Finish manually with:  pip uninstall kim-reminder -y"
+                "pip uninstall timed out.  Finish manually with:  pip uninstall --break-system-packages kim-reminder -y"
             )
         _remove_kimdir(system)
         return
@@ -716,7 +733,7 @@ def _uninstall_pip(system):
         # Give this process time to fully exit and release all file handles.
         "Start-Sleep 3",
         # Run pip uninstall via the same Python interpreter.
-        f"& '{py}' -m pip uninstall kim-reminder -y",
+        f"& '{py}' -m pip uninstall --break-system-packages kim-reminder -y",
         # Remove kim.log (retry up to 10 times in case handles linger).
         f"for($j=0;$j -lt 10;$j++){{"
         f"if(Test-Path '{log_file}'){{"

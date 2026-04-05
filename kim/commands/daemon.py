@@ -26,27 +26,23 @@ def _is_supervised() -> bool:
     (systemd, launchd, Windows Task Scheduler) rather than interactively
     by the user.  In supervised mode cmd_start blocks in-process; in
     interactive mode it re-spawns itself detached so the terminal is freed.
+
+    The most reliable cross-platform check: if we have a controlling TTY,
+    we were started interactively.  Supervisors never allocate a TTY.
     """
-    # systemd sets INVOCATION_ID for every unit it starts
-    if os.environ.get("INVOCATION_ID"):
-        return True
-    # launchd sets LAUNCH_DAEMON_NAME or __CF_USER_TEXT_ENCODING and the
-    # parent is launchd (PID 1 on macOS)
-    if os.environ.get("LAUNCH_DAEMON_NAME") or os.environ.get(
-        "__CF_USER_TEXT_ENCODING"
-    ):
-        if os.getppid() == 1:
-            return True
-    # Windows Task Scheduler child processes have no console (SESSIONNAME is
-    # absent or "Services") and parent is svchost
     if platform.system() == "Windows":
         session = os.environ.get("SESSIONNAME", "")
         if session == "" or session.lower() == "services":
             return True
-    # Caller can force supervised mode explicitly (used by the detached child)
-    if os.environ.get("KIM_DAEMON") == "1":
-        return True
-    return False
+        return False
+
+    # Unix: no controlling terminal → supervised
+    try:
+        with open("/dev/tty"):
+            pass
+        return False  # has a TTY → interactive
+    except OSError:
+        return True  # no TTY → supervised
 
 
 def _spawn_detached() -> int:
@@ -282,7 +278,7 @@ def cmd_start(args):
                 "name": f"oneshot-{int(o['fire_at'])}",
                 "title": o.get("title", "One-shot Reminder"),
                 "message": o.get("message", ""),
-                "urgency": "critical",
+                "urgency": o.get("urgency", "normal"),
                 "enabled": True,
                 "_oneshot_fire_at": o["fire_at"],
             }
@@ -355,7 +351,7 @@ def cmd_stop(args):
         print(f"kim stopped. (PID {pid})")
         log.info("Stopped by user (PID %d)", pid)
     except ProcessLookupError:
-        print(f"kim stopped. (PID {pid})")
+        print("kim is already stopped.")
         PID_FILE.unlink(missing_ok=True)
     except PermissionError:
         print(f"Permission denied to stop PID {pid}.")

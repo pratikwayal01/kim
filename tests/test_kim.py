@@ -189,6 +189,7 @@ class TestCmdRemind(unittest.TestCase):
         args.title = args_dict.get("title", None)
         args.timezone = args_dict.get("timezone", None)
         args.time = args_dict.get("time", ["in", "30m"])
+        args.urgency = args_dict.get("urgency", "normal")
 
         if config is None:
             config = {"sound": False}
@@ -275,6 +276,7 @@ class TestCmdRemind(unittest.TestCase):
                 a.title = None
                 a.timezone = None
                 a.time = ["in", "5m"]
+                a.urgency = "normal"
                 return a
 
             with patch.object(misc, "ONESHOT_FILE", fake_oneshot):
