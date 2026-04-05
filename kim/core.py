@@ -24,7 +24,7 @@ try:
 except OSError:
     pass
 
-VERSION = "4.5.3"
+VERSION = "4.5.4"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 try:
@@ -321,10 +321,10 @@ def parse_datetime(tokens: list, tz_name: str = None) -> float:
 
         ds = ds.strip()
 
-        # Normalise time suffixes: "10am" → "10:00", "2:30pm" → "14:30"
+        # Normalise time suffixes: "10am" → "10:00", "2:30pm" → "14:30", "4:5pm" → "16:05"
         def _norm_ampm(s):
             s = re.sub(
-                r"(\d{1,2})(?::(\d{2}))?([ap]m)",
+                r"(\d{1,2})(?::(\d{1,2}))?([ap]m)",
                 lambda m: (
                     "{:02d}:{:02d}".format(
                         (int(m.group(1)) % 12) + (12 if m.group(3) == "pm" else 0),
