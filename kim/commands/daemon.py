@@ -121,7 +121,7 @@ def cmd_start(args):
             pid_str = PID_FILE.read_text(encoding="utf-8").strip()
             pid = int(pid_str)
             if _is_process_running(pid):
-                print("kim is already running.")
+                print(f"kim is already running. (PID {pid})")
                 sys.exit(0)
             else:
                 log.info("Removing stale PID file (PID %s not running)", pid)
@@ -348,7 +348,7 @@ def cmd_stop(args):
         # On Windows the process is killed before its cleanup handler runs,
         # so we always remove the PID file here on all platforms.
         PID_FILE.unlink(missing_ok=True)
-        print("kim stopped.")
+        print(f"kim stopped. (PID {pid})")
         log.info("Stopped by user (PID %d)", pid)
     except ProcessLookupError:
         print("kim is already stopped.")
