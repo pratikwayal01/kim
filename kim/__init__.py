@@ -5,4 +5,4 @@ Lightweight cross-platform reminder daemon for developers.
 
 from .cli import main
 
-__version__ = "4.1.8"
+__version__ = "4.2.0"
