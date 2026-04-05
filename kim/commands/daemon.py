@@ -54,13 +54,33 @@ def _spawn_detached() -> int:
     env["KIM_DAEMON"] = "1"
 
     # Build the command to re-invoke kim.
-    # sys.argv[0] may be a .py script (script/source install), a .exe (pip/binary),
-    # or a console_scripts wrapper.  A .py file cannot be exec'd directly —
-    # it must be run via the Python interpreter.
+    #
+    # There are three install types:
+    #   1. pip / console_scripts  — argv[0] is an executable wrapper script
+    #   2. install.sh script      — argv[0] is __main__.py (not executable),
+    #                               shim sets PYTHONPATH and runs `python3 -m kim`
+    #   3. Windows binary         — argv[0] is kim.exe
+    #
+    # For case 2, running `sys.executable __main__.py` fails with ImportError
+    # (relative imports require a package context).  We must re-invoke as
+    # `python3 -m kim` with PYTHONPATH preserved from the current environment.
     argv0 = sys.argv[0]
-    if argv0.lower().endswith(".py") or not os.access(argv0, os.X_OK):
+    remaining_args = sys.argv[1:]  # e.g. ["start"]
+
+    if argv0.lower().endswith("__main__.py"):
+        # Script install via install.sh — re-invoke as a module.
+        # PYTHONPATH is already set in env (inherited from the shim).
+        import kim as _kim_pkg
+
+        pkg_parent = str(Path(_kim_pkg.__file__).parent.parent)
+        if pkg_parent not in env.get("PYTHONPATH", ""):
+            env["PYTHONPATH"] = pkg_parent + ":" + env.get("PYTHONPATH", "")
+        cmd = [sys.executable, "-m", "kim"] + remaining_args
+    elif argv0.lower().endswith(".py") or not os.access(argv0, os.X_OK):
+        # Other .py script — prepend interpreter
         cmd = [sys.executable] + sys.argv
     else:
+        # pip console_scripts wrapper or binary — directly executable
         cmd = sys.argv
 
     if platform.system() == "Windows":
