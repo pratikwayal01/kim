@@ -152,7 +152,7 @@ config: ~/.kim/config.json
 logs:   ~/.kim/kim.log""",
     )
     parser.add_argument("-v", "--version", action="version", version=f"kim {VERSION}")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", metavar="command")
 
     sub.add_parser("start", help="Start the daemon")
     sub.add_parser("stop", help="Stop the daemon")
