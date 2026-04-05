@@ -115,7 +115,7 @@ def cmd_add(args):
 
 
 def cmd_remove(args):
-    # --oneshot: remove from oneshots.json by index or message substring
+    # --oneshot: explicit one-shot removal by index or message substring
     if getattr(args, "oneshot", False):
         _remove_oneshot(args.name)
         return
@@ -127,14 +127,32 @@ def cmd_remove(args):
     initial_count = len(reminders)
     config["reminders"] = [r for r in reminders if r.get("name") != name]
 
-    if len(config["reminders"]) == initial_count:
-        print(f"Reminder '{name}' not found.")
-        sys.exit(1)
+    if len(config["reminders"]) < initial_count:
+        # Found and removed from recurring reminders.
+        _save_config(config)
+        _signal_reload()
+        print(f"{CHECK} Removed reminder '{name}'")
+        log.info("Removed reminder: %s", name)
+        return
 
-    _save_config(config)
-    _signal_reload()
-    print(f"{CHECK} Removed reminder '{name}'")
-    log.info("Removed reminder: %s", name)
+    # Not found in recurring reminders — try one-shots automatically.
+    if ONESHOT_FILE.exists():
+        try:
+            oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            oneshots = []
+        now = _time.time()
+        pending = [(i, o) for i, o in enumerate(oneshots) if o.get("fire_at", 0) > now]
+        name_lower = name.lower()
+        match = next(
+            (i for i, o in pending if name_lower in o.get("message", "").lower()), None
+        )
+        if match is not None:
+            _remove_oneshot(name)
+            return
+
+    print(f"Reminder '{name}' not found.")
+    sys.exit(1)
 
 
 def _remove_oneshot(token: str) -> None:

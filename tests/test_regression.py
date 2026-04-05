@@ -2071,5 +2071,111 @@ class TestPipUninstallDelegatesToPip(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# management.py — kim remove auto-detects one-shots (v4.4.0)
+#
+# Bug: `kim remove <name>` only searched config.json (recurring reminders).
+#      One-shot reminders live in oneshots.json and required the -o flag.
+#      Users expect `kim remove deploy` to work without knowing the flag.
+# Fix: if the name is not found in recurring reminders, automatically search
+#      pending one-shots and remove there if a match is found.
+# ---------------------------------------------------------------------------
+class TestRemoveAutoDetectsOneshots(unittest.TestCase):
+    """kim remove must fall through to one-shots when name not in config."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.config_file = Path(self.tmpdir) / "config.json"
+        self.oneshot_file = Path(self.tmpdir) / "oneshots.json"
+        # Config with no reminders
+        self.config_file.write_text(json.dumps({"reminders": []}), encoding="utf-8")
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write_oneshots(self, entries):
+        self.oneshot_file.write_text(json.dumps(entries), encoding="utf-8")
+
+    def test_remove_oneshot_without_flag(self):
+        """kim remove <msg> should cancel a matching pending one-shot."""
+        import time
+
+        future = time.time() + 9999
+        self._write_oneshots([{"message": "deploy", "fire_at": future}])
+
+        from kim.commands import management
+
+        args = MagicMock()
+        args.name = "deploy"
+        args.oneshot = False
+
+        with patch.object(
+            management, "load_config", return_value={"reminders": []}
+        ), patch.object(management, "_save_config"), patch.object(
+            management, "_signal_reload"
+        ), patch.object(management, "ONESHOT_FILE", self.oneshot_file):
+            # _remove_oneshot writes to ONESHOT_FILE; patch it there too
+            with patch("kim.commands.management.ONESHOT_FILE", self.oneshot_file):
+                management.cmd_remove(args)
+
+        remaining = json.loads(self.oneshot_file.read_text())
+        self.assertEqual(remaining, [], "One-shot must be removed from oneshots.json")
+
+    def test_remove_recurring_still_works(self):
+        """Removing a recurring reminder by name must still work."""
+        from kim.commands import management
+
+        args = MagicMock()
+        args.name = "water"
+        args.oneshot = False
+
+        config = {"reminders": [{"name": "water", "interval": 3600}]}
+        saved = {}
+
+        def fake_save(c):
+            saved.update(c)
+
+        with patch.object(management, "load_config", return_value=config), patch.object(
+            management, "_save_config", side_effect=fake_save
+        ), patch.object(management, "_signal_reload"), patch.object(
+            management, "ONESHOT_FILE", self.oneshot_file
+        ):
+            management.cmd_remove(args)
+
+        self.assertEqual(saved.get("reminders"), [])
+
+    def test_remove_not_found_exits(self):
+        """If name matches neither recurring nor one-shots, exit with error."""
+        import time
+
+        future = time.time() + 9999
+        self._write_oneshots([{"message": "standup", "fire_at": future}])
+
+        from kim.commands import management
+
+        args = MagicMock()
+        args.name = "deploy"
+        args.oneshot = False
+
+        with patch.object(
+            management, "load_config", return_value={"reminders": []}
+        ), patch.object(management, "_save_config"), patch.object(
+            management, "_signal_reload"
+        ), patch("kim.commands.management.ONESHOT_FILE", self.oneshot_file):
+            with self.assertRaises(SystemExit):
+                management.cmd_remove(args)
+
+    def test_cmd_remove_source_checks_oneshots(self):
+        """cmd_remove source must reference ONESHOT_FILE as fallback."""
+        import inspect
+        from kim.commands import management
+
+        src = inspect.getsource(management.cmd_remove)
+        self.assertIn("ONESHOT_FILE", src)
+        self.assertIn("_remove_oneshot", src)
+
+
 if __name__ == "__main__":
     unittest.main()
