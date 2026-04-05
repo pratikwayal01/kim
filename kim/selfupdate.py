@@ -593,6 +593,29 @@ def _close_log_handles():
         pass
 
 
+def _spawn_deferred_ps(ps_script: str):
+    """Spawn a hidden, detached PowerShell process to run ps_script after we exit."""
+    try:
+        subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                ps_script,
+            ],
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass  # non-fatal
+
+
 def _remove_kimdir_deferred_windows():
     """Spawn a hidden PowerShell process to remove KIM_DIR after this process exits.
 
@@ -618,25 +641,7 @@ def _remove_kimdir_deferred_windows():
             f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}",
         ]
     )
-    try:
-        subprocess.Popen(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-WindowStyle",
-                "Hidden",
-                "-Command",
-                ps_script,
-            ],
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-            close_fds=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass  # non-fatal
+    _spawn_deferred_ps(ps_script)
 
 
 def _remove_kimdir(system):
@@ -664,31 +669,69 @@ def _remove_kimdir(system):
 def _uninstall_pip(system):
     """Remove a pip-installed kim-reminder package.
 
-    Delegates binary/script removal entirely to pip (which handles kim.exe and
-    kim.bat cleanly without the locked-file issues we'd get doing it ourselves),
-    then removes ~/.kim/ user data separately.
-    """
-    print("Detected pip install — running: pip uninstall kim-reminder -y")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "uninstall", "kim-reminder", "-y"],
-            timeout=120,
-        )
-        if result.returncode == 0:
-            print(f"{CHECK} pip uninstall succeeded.")
-        else:
-            print(
-                "pip uninstall returned a non-zero exit code.\n"
-                "You can finish manually with:  pip uninstall kim-reminder -y"
-            )
-    except FileNotFoundError:
-        print("pip not found.  Finish manually with:  pip uninstall kim-reminder -y")
-    except subprocess.TimeoutExpired:
-        print(
-            "pip uninstall timed out.  Finish manually with:  pip uninstall kim-reminder -y"
-        )
+    On non-Windows: run `pip uninstall kim-reminder -y` synchronously, then
+    remove ~/.kim/ user data.
 
-    _remove_kimdir(system)
+    On Windows: kim.exe is the currently-executing process.  Windows will not
+    allow any process (including pip) to rename or delete a running .exe
+    (WinError 32).  The only solution is to exit first and delete after.  We
+    spawn a hidden background PowerShell script that:
+      1. Waits for this process to exit (polls until kim.exe is unlocked).
+      2. Runs `pip uninstall kim-reminder -y` via the same python.exe.
+      3. Removes ~/.kim/ user data (retrying kim.log then the directory).
+    """
+    if system != "Windows":
+        # Non-Windows: pip can remove the entry point cleanly right now.
+        print("Detected pip install — running: pip uninstall kim-reminder -y")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "uninstall", "kim-reminder", "-y"],
+                timeout=120,
+            )
+            if result.returncode == 0:
+                print(f"{CHECK} pip uninstall succeeded.")
+            else:
+                print(
+                    "pip uninstall returned a non-zero exit code.\n"
+                    "You can finish manually with:  pip uninstall kim-reminder -y"
+                )
+        except FileNotFoundError:
+            print(
+                "pip not found.  Finish manually with:  pip uninstall kim-reminder -y"
+            )
+        except subprocess.TimeoutExpired:
+            print(
+                "pip uninstall timed out.  Finish manually with:  pip uninstall kim-reminder -y"
+            )
+        _remove_kimdir(system)
+        return
+
+    # Windows path — everything must happen after this process exits.
+    # Build the deferred PowerShell script.
+    py = str(sys.executable).replace("'", "''")
+    d = str(KIM_DIR).replace("'", "''")
+    log_file = str(KIM_DIR / "kim.log").replace("'", "''")
+
+    ps_lines = [
+        # Give this process time to fully exit and release all file handles.
+        "Start-Sleep 3",
+        # Run pip uninstall via the same Python interpreter.
+        f"& '{py}' -m pip uninstall kim-reminder -y",
+        # Remove kim.log (retry up to 10 times in case handles linger).
+        f"for($j=0;$j -lt 10;$j++){{"
+        f"if(Test-Path '{log_file}'){{"
+        f"Remove-Item '{log_file}' -Force -ErrorAction SilentlyContinue;"
+        f"if(-not(Test-Path '{log_file}')){{break}};Start-Sleep 1}}else{{break}}}}",
+        # Remove ~/.kim/ directory (retry up to 5 times).
+        f"for($i=0;$i -lt 5;$i++){{"
+        f"if(Test-Path '{d}'){{"
+        f"Remove-Item '{d}' -Recurse -Force -ErrorAction SilentlyContinue;"
+        f"if(-not(Test-Path '{d}')){{break}};Start-Sleep 1}}else{{break}}}}",
+    ]
+    _spawn_deferred_ps("; ".join(ps_lines))
+    print(
+        "pip uninstall and data removal scheduled — will complete after this process exits."
+    )
 
 
 def _uninstall_script_or_binary(system):

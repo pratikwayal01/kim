@@ -2025,21 +2025,34 @@ class TestPipUninstallDelegatesToPip(unittest.TestCase):
         src = inspect.getsource(selfupdate._uninstall_pip)
         self.assertIn("sys.executable", src)
 
-    def test_uninstall_pip_removes_kimdir(self):
-        """_uninstall_pip must call _remove_kimdir to clean up user data."""
+    def test_uninstall_pip_windows_deferred(self):
+        """On Windows, _uninstall_pip must defer pip uninstall via PowerShell
+        (not call subprocess.run directly) because kim.exe is the running process."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate._uninstall_pip)
-        self.assertIn("_remove_kimdir", src)
+        # Must use deferred PS spawn for Windows path
+        self.assertIn("_spawn_deferred_ps", src)
+        # The PS script must contain the pip uninstall command
+        self.assertIn("-m pip uninstall kim-reminder", src)
 
-    def test_pip_uninstall_called_with_subprocess(self):
-        """_uninstall_pip must run pip as a subprocess (not importlib)."""
+    def test_uninstall_pip_non_windows_uses_subprocess_run(self):
+        """On non-Windows, _uninstall_pip must run pip synchronously via subprocess.run."""
         import inspect
         from kim import selfupdate
 
         src = inspect.getsource(selfupdate._uninstall_pip)
         self.assertIn("subprocess.run", src)
+
+    def test_uninstall_pip_windows_deferred_removes_kimdir(self):
+        """On Windows, the deferred PS script must also remove ~/.kim/."""
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn("kim.log", src)
+        self.assertIn("Remove-Item", src)
 
     def test_helper_functions_exist(self):
         """Refactored helpers must exist as top-level functions."""
@@ -2051,6 +2064,7 @@ class TestPipUninstallDelegatesToPip(unittest.TestCase):
         )
         self.assertTrue(callable(getattr(selfupdate, "_close_log_handles", None)))
         self.assertTrue(callable(getattr(selfupdate, "_remove_kimdir", None)))
+        self.assertTrue(callable(getattr(selfupdate, "_spawn_deferred_ps", None)))
         self.assertTrue(callable(getattr(selfupdate, "_uninstall_pip", None)))
         self.assertTrue(
             callable(getattr(selfupdate, "_uninstall_script_or_binary", None))
