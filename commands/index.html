@@ -1258,7 +1258,7 @@
 - <code>--slack-channel</code> — Set per-reminder Slack channel
 - <code>--slack-webhook</code> — Set per-reminder Slack webhook URL</p>
 <h2 id="one-shot-reminders">One-shot Reminders<a class="headerlink" href="#one-shot-reminders" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>remind<span class="w"> </span>MESSAGE<span class="w"> </span>TIME<span class="w"> </span><span class="o">[</span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tz<span class="w"> </span>TZ<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kim<span class="w"> </span>remind<span class="w"> </span>MESSAGE<span class="w"> </span>TIME<span class="w"> </span><span class="o">[</span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-t<span class="w"> </span>TITLE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--urgency<span class="w"> </span>URGENCY<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tz<span class="w"> </span>TZ<span class="o">]</span>
 </code></pre></div>
 <p><strong>TIME — relative:</strong>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>in 10m      10 minutes from now
@@ -1273,6 +1273,8 @@
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>at 2026-04-06 09:00    specific date and time
 </code></pre></div></p>
 <p><strong>Options:</strong>
+- <code>-t, --title</code> — Notification title (default: <code>Reminder</code>)
+- <code>--urgency</code> — <code>low</code>, <code>normal</code>, <code>critical</code> (default: <code>normal</code>)
 - <code>--tz TZ</code> — IANA timezone for absolute times (default: local system timezone)</p>
 <p><strong>Examples:</strong>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>10m
@@ -1281,6 +1283,7 @@
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup&quot;</span><span class="w"> </span>at<span class="w"> </span><span class="m">10</span>:00
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;standup&quot;</span><span class="w"> </span>at<span class="w"> </span>tomorrow<span class="w"> </span>9am
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;call&quot;</span><span class="w"> </span>at<span class="w"> </span><span class="m">2026</span>-04-06<span class="w"> </span><span class="m">14</span>:30<span class="w"> </span>--tz<span class="w"> </span>America/New_York
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>kim<span class="w"> </span>remind<span class="w"> </span><span class="s2">&quot;wake up!&quot;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>5m<span class="w"> </span>--urgency<span class="w"> </span>critical
 </code></pre></div></p>
 <p><strong>Persistence:</strong> One-shot reminders are persisted to disk (<code>~/.kim/oneshots.json</code>) and survive daemon restarts and system reboots. Expired reminders are automatically cleaned up.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
