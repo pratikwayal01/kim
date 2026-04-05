@@ -445,7 +445,7 @@ except Exception:
             compopt -o nospace 2>/dev/null
             ;;
         remind)
-            COMPREPLY=( $(compgen -W "--title -t" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--title -t --urgency" -- "$cur") )
             ;;
         sound)
             COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
@@ -567,6 +567,7 @@ _kim() {
                     _arguments \
                         "1:message:" \
                         "(-t --title)"{-t,--title}"[Notification title]:title:" \
+                        "--urgency[Urgency level]:urgency:(low normal critical)" \
                         "*:time expression:"
                     ;;
                 sound)
@@ -690,7 +691,8 @@ complete -c kim -f -n "__fish_seen_subcommand_from update" -l slack-channel   -d
 complete -c kim -f -n "__fish_seen_subcommand_from update" -l slack-webhook   -d "Per-reminder Slack webhook"  -r
 
 # remind flags
-complete -c kim -f -n "__fish_seen_subcommand_from remind" -l title -s t -d "Notification title" -r
+complete -c kim -f -n "__fish_seen_subcommand_from remind" -l title    -s t -d "Notification title"    -r
+complete -c kim -f -n "__fish_seen_subcommand_from remind" -l urgency       -d "Urgency level"          -r -a "low normal critical"
 
 # sound flags
 complete -c kim -f -n "__fish_seen_subcommand_from sound" -l set     -d "Set custom sound file"   -r -F

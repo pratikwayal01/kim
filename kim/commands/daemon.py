@@ -278,7 +278,7 @@ def cmd_start(args):
                 "name": f"oneshot-{int(o['fire_at'])}",
                 "title": o.get("title", "One-shot Reminder"),
                 "message": o.get("message", ""),
-                "urgency": "critical",
+                "urgency": o.get("urgency", "normal"),
                 "enabled": True,
                 "_oneshot_fire_at": o["fire_at"],
             }
