@@ -2035,7 +2035,7 @@ class TestPipUninstallDelegatesToPip(unittest.TestCase):
         # Must use deferred PS spawn for Windows path
         self.assertIn("_spawn_deferred_ps", src)
         # The PS script must contain the pip uninstall command
-        self.assertIn("-m pip uninstall kim-reminder", src)
+        self.assertIn("-m pip uninstall --break-system-packages kim-reminder", src)
 
     def test_uninstall_pip_non_windows_uses_subprocess_run(self):
         """On non-Windows, _uninstall_pip must run pip synchronously via subprocess.run."""
