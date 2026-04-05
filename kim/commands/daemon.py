@@ -134,12 +134,18 @@ def cmd_start(args):
     # terminal is not blocked, then return immediately.
     if not _is_supervised():
         _spawn_detached()
-        # Brief wait so the child can write its PID file before we exit
-        time.sleep(0.8)
-        try:
-            pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+        # Poll for PID file — script installs are slower to start than pip installs
+        pid = None
+        for _ in range(30):  # up to 3 seconds in 0.1s increments
+            time.sleep(0.1)
+            try:
+                pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+                break
+            except Exception:
+                continue
+        if pid:
             print(f"kim started. (PID {pid})")
-        except Exception:
+        else:
             print("kim started.")
         sys.exit(0)
 
