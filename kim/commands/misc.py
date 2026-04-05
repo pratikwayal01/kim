@@ -57,9 +57,8 @@ def cmd_remind(args):
         sys.exit(1)
 
     message = args.message
-    title = args.title or (
-        "Reminder" if platform.system() == "Windows" else f"{ALARM} Reminder"
-    )
+    title = args.title or "Reminder"
+    urgency = getattr(args, "urgency", "normal")
 
     # Human-readable display
     remaining = int(sleep_seconds)
@@ -76,15 +75,16 @@ def cmd_remind(args):
         import datetime as _dt
 
         fire_dt = _dt.datetime.fromtimestamp(fire_time).strftime("%Y-%m-%d %H:%M")
-        print(f"{title} set: '{message}' at {fire_dt} (in {display})")
+        print(f"{CHECK} Reminder set: '{message}' at {fire_dt} (in {display})")
     else:
-        print(f"{title} set: '{message}' in {display}")
+        print(f"{CHECK} Reminder set: '{message}' in {display}")
     log.info("One-shot reminder set: '%s' in %s", message, display)
 
     # Save one-shot reminder for persistence across reboots
     oneshot = {
         "message": message,
         "title": title,
+        "urgency": urgency,
         "fire_at": fire_time,
     }
     oneshots = []
@@ -122,6 +122,8 @@ def cmd_remind(args):
             message,
             "--title",
             title,
+            "--urgency",
+            urgency,
             "--seconds",
             str(sleep_seconds),
         ]
@@ -170,7 +172,7 @@ def cmd_remind(args):
         notify(
             title,
             message,
-            urgency="critical",
+            urgency=urgency,
             sound=sound,
             sound_file=sound_file,
             slack_config=slack_config if slack_config.get("enabled") else None,
@@ -192,7 +194,7 @@ def cmd_remind_fire(args):
     notify(
         args.title,
         args.message,
-        urgency="critical",
+        urgency=getattr(args, "urgency", "normal"),
         sound=sound,
         sound_file=sound_file,
         slack_config=slack_config if slack_config.get("enabled") else None,

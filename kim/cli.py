@@ -281,7 +281,13 @@ logs:   ~/.kim/kim.log""",
         ),
     )
     remind_p.add_argument(
-        "-t", "--title", help="Notification title (default: \u23f0 Reminder)"
+        "-t", "--title", help="Notification title (default: Reminder)"
+    )
+    remind_p.add_argument(
+        "--urgency",
+        choices=["low", "normal", "critical"],
+        default="normal",
+        help="Notification urgency: low, normal, critical (default: normal)",
     )
     remind_p.add_argument(
         "--tz",
@@ -292,7 +298,8 @@ logs:   ~/.kim/kim.log""",
 
     fire_p = sub.add_parser("_remind-fire", help=argparse.SUPPRESS)
     fire_p.add_argument("--message", required=True)
-    fire_p.add_argument("--title", default="\u23f0 Reminder")
+    fire_p.add_argument("--title", default="Reminder")
+    fire_p.add_argument("--urgency", default="normal")
     fire_p.add_argument("--seconds", type=float, required=True)
 
     sub.add_parser("interactive", help="Enter interactive mode").add_argument(
