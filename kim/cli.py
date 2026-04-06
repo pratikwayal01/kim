@@ -141,14 +141,15 @@ def main():
   interactive Enter interactive mode  (alias: -i)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
-  export      Export reminders to file
-  import      Import reminders from file
+  export      Export reminders to file  (--oneshots also exports pending one-shots)
+  import      Import reminders from file  (--oneshots also imports one-shots)
   validate    Validate config file
   sound       Manage the notification sound file
   completion  Generate shell completions
 
-config: ~/.kim/config.json
-logs:   ~/.kim/kim.log""",
+config:   ~/.kim/config.json
+oneshots: ~/.kim/oneshots.json
+logs:     ~/.kim/kim.log""",
     )
     parser.add_argument("-v", "--version", action="version", version=f"kim {VERSION}")
     sub = parser.add_subparsers(dest="command", metavar="command")
@@ -323,6 +324,11 @@ logs:   ~/.kim/kim.log""",
     export_p.add_argument(
         "-o", "--output", help="Output file (prints to stdout if not specified)"
     )
+    export_p.add_argument(
+        "--oneshots",
+        action="store_true",
+        help="Also include pending one-shot reminders in the export",
+    )
 
     import_p = sub.add_parser("import", help="Import reminders from a file")
     import_p.add_argument("file", help="File to import from")
@@ -337,6 +343,11 @@ logs:   ~/.kim/kim.log""",
         "--merge",
         action="store_true",
         help="Merge with existing reminders instead of replacing",
+    )
+    import_p.add_argument(
+        "--oneshots",
+        action="store_true",
+        help="Also import one-shot reminders from the file (future fire times only)",
     )
 
     sub.add_parser("validate", help="Validate config file")

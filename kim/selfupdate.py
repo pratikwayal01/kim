@@ -549,27 +549,70 @@ def _remove_os_service(system):
 
 
 def _kill_remind_fire_orphans(system):
-    """Synchronously kill any lingering _remind-fire subprocesses.
+    """Kill lingering one-shot fire subprocesses before removing files.
 
-    These hold their own handle on kim.log and must be terminated before we
-    attempt to delete KIM_DIR.  Best-effort — failures are silently ignored.
+    On Windows: kill processes whose command line contains '_remind-fire'.
+    On Unix: the fork children from 'kim remind' sleep until their fire time.
+    They inherit sys.argv, so their cmdline always contains 'kim remind'.
+    We kill them via /proc (Linux) or 'pkill -f' fallback (macOS/others).
+    Our own PID is excluded to avoid self-kill.
+    Best-effort — failures are silently ignored.
     """
     try:
-        subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Get-WmiObject Win32_Process | "
-                "Where-Object { $_.CommandLine -like '*_remind-fire*' } | "
-                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
-            ]
-            if system == "Windows"
-            else ["pkill", "-f", "_remind-fire"],
-            capture_output=True,
-            timeout=10,
-        )
+        if system == "Windows":
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Get-WmiObject Win32_Process | "
+                    "Where-Object { $_.CommandLine -like '*_remind-fire*' } | "
+                    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+                ],
+                capture_output=True,
+                timeout=10,
+            )
+        elif system == "Linux":
+            # Read /proc/<pid>/cmdline for each process and SIGTERM matching ones.
+            import signal as _sig
+
+            my_pid = os.getpid()
+            proc_dir = Path("/proc")
+            for entry in proc_dir.iterdir():
+                if not entry.name.isdigit():
+                    continue
+                pid = int(entry.name)
+                if pid == my_pid:
+                    continue
+                try:
+                    cmdline = (
+                        (entry / "cmdline")
+                        .read_bytes()
+                        .replace(b"\x00", b" ")
+                        .decode("utf-8", errors="replace")
+                    )
+                    if (
+                        "kim" in cmdline
+                        and "remind" in cmdline
+                        and "_remind-fire" not in cmdline
+                    ):
+                        os.kill(pid, _sig.SIGTERM)
+                    elif "_remind-fire" in cmdline:
+                        os.kill(pid, _sig.SIGTERM)
+                except (OSError, ProcessLookupError):
+                    pass  # process already gone
+        else:
+            # macOS / other Unix: fall back to pkill -f
+            import shutil as _shutil
+
+            if _shutil.which("pkill"):
+                for pattern in ("_remind-fire", "kim remind"):
+                    subprocess.run(
+                        ["pkill", "-f", pattern],
+                        capture_output=True,
+                        timeout=10,
+                    )
     except Exception:
         pass
 
@@ -887,13 +930,23 @@ def cmd_uninstall(args):
     # 1. Remove OS autostart service/task.
     _remove_os_service(system)
 
-    # 2. Kill orphaned _remind-fire subprocesses (hold handles on kim.log).
+    # 2. Kill orphaned one-shot fire subprocesses.
     _kill_remind_fire_orphans(system)
 
-    # 3. Close this process's log file handles (best-effort flush).
+    # 3. Clear oneshots.json so any surviving fork children cannot re-schedule
+    #    their reminders on a future kim start.
+    from .core import ONESHOT_FILE
+
+    try:
+        if ONESHOT_FILE.exists():
+            ONESHOT_FILE.write_text("[]", encoding="utf-8")
+    except OSError:
+        pass
+
+    # 4. Close this process's log file handles (best-effort flush).
     _close_log_handles()
 
-    # 4. Remove binaries and ~/.kim/ user data.
+    # 5. Remove binaries and ~/.kim/ user data.
     if install_type == "pip":
         _uninstall_pip(system)
     else:

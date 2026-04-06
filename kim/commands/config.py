@@ -183,27 +183,49 @@ def cmd_validate(args):
 
 def cmd_export(args):
     config = load_config()
+    include_oneshots = getattr(args, "oneshots", False)
+
+    # Optionally load pending one-shots
+    pending_oneshots = []
+    if include_oneshots and ONESHOT_FILE.exists():
+        try:
+            raw_os = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            now = _time.time()
+            pending_oneshots = [o for o in raw_os if o.get("fire_at", 0) > now]
+        except (json.JSONDecodeError, OSError):
+            pending_oneshots = []
 
     if args.format == "json":
-        output = json.dumps(config, indent=2)
+        export_doc = dict(config)
+        if include_oneshots:
+            export_doc["oneshots"] = pending_oneshots
+        output = json.dumps(export_doc, indent=2)
     else:  # csv
         reminders = config.get("reminders", [])
-        if reminders:
-            lines = ["name,interval,title,message,urgency,enabled"]
-            for r in reminders:
-                name = r.get("name", "").replace(",", ";")
-                title = r.get("title", "").replace(",", ";")
-                message = r.get("message", "").replace(",", ";").replace("\n", " ")
-                line = f"{name},{r.get('interval') or r.get('interval_minutes', '')},{title},{message},{r.get('urgency', 'normal')},{r.get('enabled', True)}"
-                lines.append(line)
-            output = "\n".join(lines)
-        else:
-            output = "name,interval,title,message,urgency,enabled"
+        lines = ["name,interval,title,message,urgency,enabled"]
+        for r in reminders:
+            name = r.get("name", "").replace(",", ";")
+            title = r.get("title", "").replace(",", ";")
+            message = r.get("message", "").replace(",", ";").replace("\n", " ")
+            line = f"{name},{r.get('interval') or r.get('interval_minutes', '')},{title},{message},{r.get('urgency', 'normal')},{r.get('enabled', True)}"
+            lines.append(line)
+        if include_oneshots and pending_oneshots:
+            lines.append("")
+            lines.append("# oneshots: message,title,urgency,fire_at")
+            for o in pending_oneshots:
+                msg = o.get("message", "").replace(",", ";").replace("\n", " ")
+                ttl = o.get("title", "Reminder").replace(",", ";")
+                urg = o.get("urgency", "normal")
+                lines.append(f"{msg},{ttl},{urg},{o.get('fire_at', 0)}")
+        output = "\n".join(lines)
 
     if args.output:
         try:
             Path(args.output).write_text(output, encoding="utf-8")
-            print(f"Exported to {args.output}")
+            msg = f"Exported to {args.output}"
+            if include_oneshots:
+                msg += f" ({len(pending_oneshots)} one-shot(s) included)"
+            print(msg)
         except OSError as e:
             print(f"Error writing file: {e}")
             sys.exit(1)
@@ -265,6 +287,8 @@ def cmd_import(args):
         else:
             fmt = args.format
 
+        imported_oneshots = []
+
         if fmt == "csv":
             lines = content.strip().splitlines()
             if len(lines) < 2:
@@ -272,9 +296,32 @@ def cmd_import(args):
                 sys.exit(1)
 
             reminders = []
+            in_oneshots = False
             for line in lines[1:]:
+                if line.startswith("# oneshots:"):
+                    in_oneshots = True
+                    continue
+                if not line.strip() or line.startswith("#"):
+                    continue
                 parts = line.split(",")
-                if len(parts) >= 6:
+                if in_oneshots:
+                    if len(parts) >= 4:
+                        try:
+                            fire_at = float(parts[3])
+                        except ValueError:
+                            continue
+                        if fire_at > _time.time():
+                            imported_oneshots.append(
+                                {
+                                    "message": parts[0].replace(";", ","),
+                                    "title": parts[1].replace(";", ","),
+                                    "urgency": parts[2]
+                                    if parts[2] in ("low", "normal", "critical")
+                                    else "normal",
+                                    "fire_at": fire_at,
+                                }
+                            )
+                elif len(parts) >= 6:
                     reminders.append(
                         _sanitize_reminder(
                             {
@@ -309,6 +356,21 @@ def cmd_import(args):
                     ],
                 },
             }
+            # Extract one-shots from JSON export (future fire times only)
+            now = _time.time()
+            for o in raw.get("oneshots", []):
+                fire_at = o.get("fire_at", 0)
+                if isinstance(fire_at, (int, float)) and fire_at > now:
+                    imported_oneshots.append(
+                        {
+                            "message": str(o.get("message", ""))[:500],
+                            "title": str(o.get("title", "Reminder"))[:200],
+                            "urgency": o.get("urgency", "normal")
+                            if o.get("urgency") in ("low", "normal", "critical")
+                            else "normal",
+                            "fire_at": float(fire_at),
+                        }
+                    )
 
         config = load_config()
 
@@ -327,6 +389,39 @@ def cmd_import(args):
 
         _save_config(config)
         print(f"{CHECK} {action} {len(imported_data.get('reminders', []))} reminder(s)")
+
+        # Handle one-shots import
+        if getattr(args, "oneshots", False) and imported_oneshots:
+            existing_os = []
+            if ONESHOT_FILE.exists():
+                try:
+                    existing_os = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    existing_os = []
+            existing_fire_ats = {o.get("fire_at") for o in existing_os}
+            added = [
+                o for o in imported_oneshots if o["fire_at"] not in existing_fire_ats
+            ]
+            if added:
+                merged_os = existing_os + added
+                try:
+                    _tmp = ONESHOT_FILE.with_suffix(".tmp")
+                    _tmp.write_text(json.dumps(merged_os, indent=2), encoding="utf-8")
+                    if platform.system() != "Windows":
+                        try:
+                            os.chmod(_tmp, 0o600)
+                        except OSError:
+                            pass
+                    _tmp.replace(ONESHOT_FILE)
+                    print(f"{CHECK} Imported {len(added)} pending one-shot(s)")
+                except OSError as e:
+                    print(f"Warning: could not write oneshots.json: {e}")
+            else:
+                print(
+                    "No new pending one-shots to import (all already exist or expired)."
+                )
+        elif getattr(args, "oneshots", False):
+            print("No pending one-shots found in the import file.")
 
     except json.JSONDecodeError as e:
         print(f"Invalid JSON: {e}")

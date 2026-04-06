@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [4.5.6] - 2026-04-07
+
+### Added
+- **`kim export --oneshots`** — include pending one-shot reminders in the export (JSON: `"oneshots"` array; CSV: appended section). Use with `-o file` to save to a file.
+- **`kim import --oneshots`** — restore pending one-shot reminders from a file produced by `kim export --oneshots`. Only future fire times are imported; duplicates are skipped.
+- **Help footer** now shows `oneshots: ~/.kim/oneshots.json` alongside the config and log paths.
+
+### Fixed
+- **`kim uninstall` now kills orphaned `kim remind` fork children** — on Linux the uninstall reads `/proc` directly to find and SIGTERM every sleeping `kim remind` child process. On macOS/other Unix it falls back to `pkill -f`. This prevents a one-shot reminder from firing after kim has been uninstalled.
+- **`kim uninstall` clears `oneshots.json` before removing `~/.kim/`** — even if a fork child survives the SIGTERM (e.g. already woken), the cleared file means it cannot write back or be replayed on any future `kim start`.
+
 ## [4.5.5] - 2026-04-05
 
 ### Fixed
