@@ -2880,7 +2880,9 @@ class TestSoundValidateReadPermission(unittest.TestCase):
     @unittest.skipIf(
         platform.system() == "Windows", "chmod 000 not testable on Windows"
     )
-    @unittest.skipIf(os.getuid() == 0, "root bypasses permission checks")
+    @unittest.skipIf(
+        getattr(os, "getuid", lambda: 1)() == 0, "root bypasses permission checks"
+    )
     def test_unreadable_file_rejected(self):
         from kim.sound import validate_sound_file
 

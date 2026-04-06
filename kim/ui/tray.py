@@ -42,10 +42,28 @@ def _make_dot_icon(color: str, size: int = 22) -> QIcon:
     return QIcon(pix)
 
 
-# Pre-built icons
-_ICON_GREEN = _make_dot_icon("#4caf50")  # daemon running
-_ICON_RED = _make_dot_icon("#f44336")  # daemon stopped
-_ICON_GREY = _make_dot_icon("#9e9e9e")  # unknown / initialising
+# Icons are built lazily on first use so that QApplication exists by the time
+# QPixmap is constructed.  Module-level QPixmap creation crashes with:
+#   "QPixmap: Must construct a QGuiApplication before a QPixmap"
+_ICON_GREEN: "QIcon | None" = None
+_ICON_RED: "QIcon | None" = None
+_ICON_GREY: "QIcon | None" = None
+
+
+def _get_icon(color: str) -> "QIcon":
+    """Return (and cache) a dot icon, building it on first call."""
+    global _ICON_GREEN, _ICON_RED, _ICON_GREY
+    if color == "#4caf50":
+        if _ICON_GREEN is None:
+            _ICON_GREEN = _make_dot_icon(color)
+        return _ICON_GREEN
+    if color == "#f44336":
+        if _ICON_RED is None:
+            _ICON_RED = _make_dot_icon(color)
+        return _ICON_RED
+    if _ICON_GREY is None:
+        _ICON_GREY = _make_dot_icon(color)
+    return _ICON_GREY
 
 
 class KimTrayIcon(QSystemTrayIcon):
@@ -64,7 +82,7 @@ class KimTrayIcon(QSystemTrayIcon):
     """
 
     def __init__(self, open_manager_cb, add_reminder_cb, quit_cb, parent=None):
-        super().__init__(_ICON_GREY, parent)
+        super().__init__(_get_icon("#9e9e9e"), parent)
 
         self._open_manager_cb = open_manager_cb
         self._add_reminder_cb = add_reminder_cb
@@ -84,12 +102,12 @@ class KimTrayIcon(QSystemTrayIcon):
         """Update the icon and status label to reflect daemon state."""
         self._daemon_running = running
         if running:
-            self.setIcon(_ICON_GREEN)
+            self.setIcon(_get_icon("#4caf50"))
             self._status_action.setText("● Daemon: Running")
             self._start_action.setEnabled(False)
             self._stop_action.setEnabled(True)
         else:
-            self.setIcon(_ICON_RED)
+            self.setIcon(_get_icon("#f44336"))
             self._status_action.setText("○ Daemon: Stopped")
             self._start_action.setEnabled(True)
             self._stop_action.setEnabled(False)
@@ -139,11 +157,10 @@ class KimTrayIcon(QSystemTrayIcon):
 
     def _stop_daemon(self) -> None:
         try:
-            subprocess.run(
+            subprocess.Popen(
                 [sys.executable, "-m", "kim", "stop"],
-                timeout=10,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        except (OSError, subprocess.TimeoutExpired):
+        except OSError:
             pass

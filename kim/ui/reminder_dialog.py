@@ -147,7 +147,7 @@ class ReminderDialog(QDialog):
         at_layout = QHBoxLayout(self._at_row)
         at_layout.setContentsMargins(0, 0, 0, 0)
         self._at_edit = QTimeEdit()
-        self._at_edit.setDisplayFormat("HH:mm")
+        self._at_edit.setDisplayFormat("hh:mm AP")
         self._at_edit.setTime(QTime(9, 0))
         at_layout.addWidget(self._at_edit)
 
