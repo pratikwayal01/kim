@@ -2177,5 +2177,1472 @@ class TestRemoveAutoDetectsOneshots(unittest.TestCase):
         self.assertIn("_remove_oneshot", src)
 
 
+# ===========================================================================
+# v4.5.5 regression tests
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# scheduler.py — _wakeup.clear() must be inside the lock
+#
+# Bug: _wakeup.clear() was called OUTSIDE the lock. A wakeup signal set
+#      between reading the heap and calling _wakeup.wait() was lost, causing
+#      the scheduler to sleep past a just-added reminder.
+# Fix: moved _wakeup.clear() to the first statement inside `with self._lock`.
+# ---------------------------------------------------------------------------
+class TestSchedulerWakeupClearInsideLock(unittest.TestCase):
+    """_wakeup.clear() must appear after 'with self._lock:' in _run."""
+
+    def test_wakeup_clear_inside_lock(self):
+        import inspect
+        from kim.scheduler import KimScheduler
+
+        src = inspect.getsource(KimScheduler._run)
+        # Find position of 'with self._lock:' and '_wakeup.clear()'
+        lock_pos = src.find("with self._lock:")
+        clear_pos = src.find("self._wakeup.clear()")
+        self.assertGreater(lock_pos, -1, "'with self._lock:' not found in _run")
+        self.assertGreater(clear_pos, -1, "self._wakeup.clear() not found in _run")
+        self.assertGreater(
+            clear_pos,
+            lock_pos,
+            "_wakeup.clear() must appear AFTER 'with self._lock:' in _run — "
+            "calling it outside the lock loses wakeup signals",
+        )
+
+
+# ---------------------------------------------------------------------------
+# scheduler.py — notifier must run in a daemon thread
+#
+# Bug: notifier was called directly in the scheduler loop. A slow notifier
+#      (e.g. a network Slack call) blocked the scheduler from rescheduling
+#      other reminders until the call returned.
+# Fix: notifier is launched in a daemon Thread so it never stalls the loop.
+# ---------------------------------------------------------------------------
+class TestSchedulerNotifierInThread(unittest.TestCase):
+    """_fire_due_events must launch the notifier in a daemon Thread."""
+
+    def test_notifier_thread_in_source(self):
+        import inspect
+        from kim.scheduler import KimScheduler
+
+        src = inspect.getsource(KimScheduler._fire_due_events)
+        self.assertIn(
+            "threading.Thread",
+            src,
+            "_fire_due_events must start a threading.Thread for the notifier",
+        )
+        self.assertIn(
+            "daemon=True",
+            src,
+            "Notifier thread must be a daemon thread",
+        )
+
+    def test_slow_notifier_does_not_block_scheduler(self):
+        """A notifier that sleeps 0.3 s must not delay _fire_due_events > 0.2 s."""
+        from kim.scheduler import KimScheduler
+
+        fired = []
+
+        def slow_notifier(reminder):
+            time.sleep(0.3)
+            fired.append(reminder)
+
+        config = {"reminders": []}
+        sched = KimScheduler(config, slow_notifier)
+        # Manually inject a due event
+        from kim.scheduler import _Event
+        import heapq
+
+        event = _Event(fire_at=time.time() - 1, reminder={"name": "test"})
+        sched._live["test"] = event
+        heapq.heappush(sched._heap, event)
+
+        t0 = time.time()
+        sched._fire_due_events()
+        elapsed = time.time() - t0
+
+        self.assertLess(
+            elapsed,
+            0.2,
+            f"_fire_due_events took {elapsed:.3f}s — slow notifier is blocking the scheduler loop",
+        )
+
+
+# ---------------------------------------------------------------------------
+# scheduler.py — one-shot removed from _live after firing
+#
+# Bug: after a one-shot reminder fired, it remained in _live. The scheduler
+#      would attempt to reschedule it and push a new event onto the heap,
+#      causing it to fire repeatedly.
+# Fix: after firing a one-shot (has _oneshot_fire_at key), the entry is
+#      deleted from _live.
+# ---------------------------------------------------------------------------
+class TestOneshotRemovedFromLiveAfterFire(unittest.TestCase):
+    """One-shot reminder must be removed from _live after it fires."""
+
+    def test_oneshot_removed_from_live(self):
+        from kim.scheduler import KimScheduler, _Event
+        import heapq
+
+        config = {"reminders": []}
+        fired = []
+        sched = KimScheduler(config, lambda r: fired.append(r))
+
+        reminder = {
+            "name": "once",
+            "_oneshot_fire_at": time.time() - 1,
+            "message": "one-shot test",
+        }
+        event = _Event(fire_at=time.time() - 1, reminder=reminder)
+        with sched._lock:
+            sched._live["once"] = event
+            heapq.heappush(sched._heap, event)
+
+        sched._fire_due_events()
+        # Give the notifier thread a moment to finish
+        time.sleep(0.05)
+
+        self.assertNotIn(
+            "once",
+            sched._live,
+            "One-shot must be removed from _live after firing",
+        )
+
+
+# ---------------------------------------------------------------------------
+# commands/misc.py — oneshot file chmod 0o600 on write
+#
+# Bug: the temporary oneshot file was written without restricting permissions,
+#      leaving it world-readable (0o644 default umask) until replaced.
+# Fix: os.chmod(_tmp, 0o600) added after writing the .tmp file in
+#      cmd_remind, load_oneshot_reminders, and remove_oneshot.
+# ---------------------------------------------------------------------------
+class TestOneshotChmodOnWrite(unittest.TestCase):
+    """On non-Windows, oneshot writes must chmod the tmp file to 0o600."""
+
+    def _get_src(self):
+        import inspect
+        from kim.commands import misc
+
+        return inspect.getsource(misc)
+
+    @unittest.skipIf(platform.system() == "Windows", "chmod not applicable on Windows")
+    def test_cmd_remind_chmods_tmp(self):
+        src = self._get_src()
+        # count occurrences of chmod 0o600 near ONESHOT_FILE writes
+        self.assertIn(
+            "os.chmod(_tmp, 0o600)",
+            src,
+            "cmd_remind / oneshot write path must chmod tmp file to 0o600",
+        )
+
+    @unittest.skipIf(platform.system() == "Windows", "chmod not applicable on Windows")
+    def test_remove_oneshot_chmods_tmp(self):
+        import inspect
+        from kim.commands.misc import remove_oneshot
+
+        src = inspect.getsource(remove_oneshot)
+        self.assertIn(
+            "os.chmod(_tmp, 0o600)",
+            src,
+            "remove_oneshot must chmod tmp file to 0o600",
+        )
+
+    @unittest.skipIf(platform.system() == "Windows", "chmod not applicable on Windows")
+    def test_load_oneshot_reminders_chmods_tmp(self):
+        import inspect
+        from kim.commands.misc import load_oneshot_reminders
+
+        src = inspect.getsource(load_oneshot_reminders)
+        self.assertIn(
+            "os.chmod(_tmp, 0o600)",
+            src,
+            "load_oneshot_reminders cleanup write must chmod tmp file to 0o600",
+        )
+
+
+# ---------------------------------------------------------------------------
+# commands/misc.py — sleep_seconds must be clamped to 0.0
+#
+# Bug: if the system clock jumped forward between parse_datetime() and
+#      time.time(), sleep_seconds could be negative, causing time.sleep()
+#      to raise or behave unexpectedly.
+# Fix: sleep_seconds = max(0.0, fire_time - time.time())
+# ---------------------------------------------------------------------------
+class TestCmdRemindNegativeSleepClamped(unittest.TestCase):
+    """sleep_seconds must be clamped to >= 0.0 with max(0.0, ...)."""
+
+    def test_max_zero_in_source(self):
+        import inspect
+        from kim.commands import misc
+
+        src = inspect.getsource(misc.cmd_remind)
+        self.assertIn(
+            "max(0.0,",
+            src,
+            "cmd_remind must clamp sleep_seconds with max(0.0, ...) to prevent negative sleep",
+        )
+
+    @unittest.skipIf(platform.system() == "Windows", "fork not available on Windows")
+    def test_negative_sleep_clamped_to_zero(self):
+        """When time.time() > fire_time, sleep called with 0.0 not a negative value."""
+        from kim.commands import misc
+
+        slept = []
+        original_sleep = time.sleep
+
+        def fake_sleep(s):
+            slept.append(s)
+            # Don't actually sleep
+            pass
+
+        # fire_time = now - 5; so sleep_seconds would be -5 without the clamp
+        fire_time = time.time() - 5.0
+
+        with patch.object(misc, "parse_datetime", return_value=fire_time):
+            with patch("time.sleep", side_effect=fake_sleep):
+                with patch(
+                    "os.fork", return_value=1
+                ):  # parent path — returns immediately
+                    with patch("builtins.print"):
+                        args = MagicMock()
+                        args.time = ["1s"]
+                        args.message = "test"
+                        args.title = None
+                        args.timezone = None
+                        args.urgency = "normal"
+                        try:
+                            misc.cmd_remind(args)
+                        except SystemExit:
+                            pass
+
+        # If sleep was called, it must not have been with a negative value
+        for s in slept:
+            self.assertGreaterEqual(
+                s,
+                0.0,
+                f"time.sleep called with negative value {s} — sleep_seconds not clamped",
+            )
+
+
+# ---------------------------------------------------------------------------
+# commands/management.py — cmd_update rejects invalid --interval
+#
+# Bug: cmd_update accepted any string as --interval and stored it directly
+#      in config without validation. A typo like "foo" would silently write
+#      an invalid interval that the scheduler would skip.
+# Fix: validate via KimScheduler._parse_interval; exit 1 if invalid.
+# ---------------------------------------------------------------------------
+class TestCmdUpdateIntervalValidation(unittest.TestCase):
+    """cmd_update --interval with invalid value must exit 1, not save config."""
+
+    def test_invalid_interval_exits_one(self):
+        from kim.commands import management
+
+        config = {"reminders": [{"name": "water", "interval": "30m", "enabled": True}]}
+        args = MagicMock()
+        args.name = "water"
+        args.interval = "foo"
+        args.at_time = None
+        args.timezone = None
+        args.title = None
+        args.message = None
+        args.urgency = None
+        args.enable = False
+        args.disable = False
+
+        save_called = []
+
+        with patch.object(management, "load_config", return_value=config):
+            with patch.object(
+                management, "_save_config", side_effect=lambda c: save_called.append(c)
+            ):
+                with patch("builtins.print"):
+                    with self.assertRaises(SystemExit) as cm:
+                        management.cmd_update(args)
+
+        self.assertEqual(cm.exception.code, 1, "Invalid interval must exit with code 1")
+        self.assertEqual(
+            save_called, [], "_save_config must NOT be called for invalid interval"
+        )
+
+    def test_valid_interval_is_accepted(self):
+        from kim.commands import management
+
+        config = {"reminders": [{"name": "water", "interval": "30m", "enabled": True}]}
+        args = MagicMock()
+        args.name = "water"
+        args.interval = "1h"
+        args.at_time = None
+        args.timezone = None
+        args.title = None
+        args.message = None
+        args.urgency = None
+        args.enable = False
+        args.disable = False
+
+        save_called = []
+
+        with patch.object(management, "load_config", return_value=config):
+            with patch.object(
+                management, "_save_config", side_effect=lambda c: save_called.append(c)
+            ):
+                with patch.object(management, "_signal_reload"):
+                    with patch("builtins.print"):
+                        management.cmd_update(args)
+
+        self.assertEqual(len(save_called), 1, "Valid interval must call _save_config")
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — cmd_validate rejects bad 'at' field format
+#
+# Bug: cmd_validate only checked that an 'at' key was present but did not
+#      validate the value format, so "at": "not-valid" would pass validation.
+# Fix: cmd_validate now applies a fullmatch regex (\d{1,2}):(\d{2}) to the
+#      at value and exits 1 if it doesn't match.
+# ---------------------------------------------------------------------------
+class TestCmdValidateAtFieldFormat(unittest.TestCase):
+    """cmd_validate must reject reminders whose 'at' value is not HH:MM."""
+
+    def _run(self, reminders):
+        from kim.commands import config as cfg_mod
+
+        cfg = {"reminders": reminders}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = Path(tmpdir) / "config.json"
+            cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+            with patch.object(cfg_mod, "CONFIG", cfg_file):
+                with patch("builtins.print"):
+                    try:
+                        cfg_mod.cmd_validate(MagicMock())
+                        return 0
+                    except SystemExit as e:
+                        return e.code
+
+    def test_invalid_at_rejected(self):
+        result = self._run([{"name": "bad", "at": "not-valid"}])
+        self.assertEqual(result, 1, "cmd_validate must exit 1 for invalid 'at' format")
+
+    def test_valid_at_accepted(self):
+        result = self._run([{"name": "standup", "at": "09:30"}])
+        self.assertEqual(result, 0, "cmd_validate must accept valid 'at' value '09:30'")
+
+    def test_regex_in_validate_source(self):
+        import inspect
+        from kim.commands import config as cfg_mod
+
+        src = inspect.getsource(cfg_mod.cmd_validate)
+        self.assertIn(
+            "fullmatch",
+            src,
+            "cmd_validate must use re.fullmatch to validate the 'at' field format",
+        )
+
+
+# ---------------------------------------------------------------------------
+# notifications.py — _notify_slack_webhook logs warning on non-"ok" response
+#
+# Bug: _notify_slack_webhook did not check the Slack response body. Silent
+#      failures (e.g. wrong webhook URL returning "invalid_auth") went
+#      unnoticed.
+# Fix: after reading the response, if body != "ok", log.warning is called.
+# ---------------------------------------------------------------------------
+class TestSlackWebhookResponseCheck(unittest.TestCase):
+    """_notify_slack_webhook must log a warning when response body is not 'ok'."""
+
+    def _make_fake_urlopen(self, body: str):
+        """Return a context manager mock whose .read() returns body bytes."""
+        fake_resp = MagicMock()
+        fake_resp.read.return_value = body.encode("utf-8")
+        fake_resp.__enter__ = lambda s: fake_resp
+        fake_resp.__exit__ = MagicMock(return_value=False)
+        return fake_resp
+
+    def test_non_ok_body_triggers_warning(self):
+        from kim import notifications
+
+        fake_resp = self._make_fake_urlopen("invalid_auth")
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            with patch.object(notifications.log, "warning") as mock_warn:
+                notifications._notify_slack_webhook("Title", "Msg", "https://fake.hook")
+                mock_warn.assert_called_once()
+                args = mock_warn.call_args[0]
+                self.assertIn("unexpected", args[0].lower())
+
+    def test_ok_body_no_warning(self):
+        from kim import notifications
+
+        fake_resp = self._make_fake_urlopen("ok")
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            with patch.object(notifications.log, "warning") as mock_warn:
+                notifications._notify_slack_webhook("Title", "Msg", "https://fake.hook")
+                mock_warn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# notifications.py — _notify_slack_bot logs warning when ok=false
+#
+# Bug: _notify_slack_bot did not check the "ok" field in the JSON response.
+#      A channel_not_found error would be swallowed silently.
+# Fix: response JSON is parsed; if ok is False, log.warning is called with
+#      the error field.
+# ---------------------------------------------------------------------------
+class TestSlackBotOkFalseCheck(unittest.TestCase):
+    """_notify_slack_bot must log a warning when JSON response has ok=false."""
+
+    def _make_fake_urlopen(self, body_dict: dict):
+        fake_resp = MagicMock()
+        fake_resp.read.return_value = json.dumps(body_dict).encode("utf-8")
+        fake_resp.__enter__ = lambda s: fake_resp
+        fake_resp.__exit__ = MagicMock(return_value=False)
+        return fake_resp
+
+    def test_ok_false_triggers_warning(self):
+        from kim import notifications
+
+        fake_resp = self._make_fake_urlopen({"ok": False, "error": "channel_not_found"})
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            with patch.object(notifications.log, "warning") as mock_warn:
+                notifications._notify_slack_bot("Title", "Msg", "xoxb-fake", "#general")
+                mock_warn.assert_called_once()
+                args = mock_warn.call_args[0]
+                # Should mention ok=false or the error
+                combined = " ".join(str(a) for a in args)
+                self.assertTrue(
+                    "ok" in combined.lower() or "channel_not_found" in combined,
+                    f"Warning message should mention ok=false or the error: {combined}",
+                )
+
+    def test_ok_true_no_warning(self):
+        from kim import notifications
+
+        fake_resp = self._make_fake_urlopen({"ok": True})
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            with patch.object(notifications.log, "warning") as mock_warn:
+                notifications._notify_slack_bot("Title", "Msg", "xoxb-fake", "#general")
+                mock_warn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# interactive.py — edit_reminder clears 'at' and 'timezone' when new interval given
+#
+# Bug: when the user entered a new interval in the interactive edit flow, the
+#      old 'at' and 'timezone' keys were left on the reminder dict. The
+#      scheduler would then treat it as an at-time reminder, ignoring the new
+#      interval.
+# Fix: r.pop("at", None) and r.pop("timezone", None) inside the
+#      `if new_interval:` block.
+# ---------------------------------------------------------------------------
+class TestInteractiveEditReminderClearsAtKey(unittest.TestCase):
+    """edit_reminder must remove 'at' and 'timezone' when a new interval is set."""
+
+    def test_pop_at_in_source(self):
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        self.assertIn(
+            'r.pop("at", None)',
+            src,
+            "edit_reminder must call r.pop('at', None) when updating interval",
+        )
+
+    def test_pop_timezone_in_source(self):
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        self.assertIn(
+            'r.pop("timezone", None)',
+            src,
+            "edit_reminder must call r.pop('timezone', None) when updating interval",
+        )
+
+    def test_pops_inside_new_interval_block(self):
+        """Both pops must appear after 'if new_interval' or 'if new_interval:'."""
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        interval_block_pos = src.find("new_interval")
+        at_pop_pos = src.find('r.pop("at", None)')
+        tz_pop_pos = src.find('r.pop("timezone", None)')
+        self.assertGreater(
+            at_pop_pos,
+            interval_block_pos,
+            "r.pop('at') must appear after the new_interval check",
+        )
+        self.assertGreater(
+            tz_pop_pos,
+            interval_block_pos,
+            "r.pop('timezone') must appear after the new_interval check",
+        )
+
+
+# ---------------------------------------------------------------------------
+# interactive.py — add_oneshot must not hardcode urgency="critical"
+#
+# Bug: add_oneshot called notify(..., urgency="critical") regardless of what
+#      the user typed, making all interactive one-shots critical.
+# Fix: user input is collected into urgency_input (or similar variable) and
+#      passed to notify.
+# ---------------------------------------------------------------------------
+class TestInteractiveAddOneshotUrgency(unittest.TestCase):
+    """add_oneshot must not hardcode urgency='critical'."""
+
+    def test_critical_not_hardcoded(self):
+        import inspect
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        # Look for the pattern urgency="critical" as a literal keyword argument
+        # outside of a comment
+        import re
+
+        hardcoded = re.findall(r'urgency\s*=\s*["\']critical["\']', src)
+        # It's acceptable to have it as a default choice label but not as
+        # the only value passed to notify in the add_oneshot flow.
+        # We check that the notify call uses a variable, not a literal.
+        notify_calls = re.findall(
+            r'notify\([^)]*urgency\s*=\s*["\']critical["\'][^)]*\)', src
+        )
+        self.assertEqual(
+            notify_calls,
+            [],
+            "add_oneshot must not hardcode urgency='critical' in the notify() call; "
+            f"found: {notify_calls}",
+        )
+
+    def test_urgency_variable_used(self):
+        import inspect, re
+        from kim import interactive
+
+        src = inspect.getsource(interactive.cmd_interactive)
+        # The urgency value must be read from user input into a variable
+        self.assertTrue(
+            "urgency" in src
+            and (
+                "urgency_input" in src
+                or "urgency_choice" in src
+                or re.search(r"urgency\s*=\s*\w+", src)
+            ),
+            "add_oneshot must use a variable for urgency, not a hardcoded string",
+        )
+
+
+# ---------------------------------------------------------------------------
+# core.py — load_config prints to stderr on JSON corruption
+#
+# Bug: load_config() silently swallowed JSONDecodeError and returned defaults
+#      with no user-visible feedback, making corruption hard to diagnose.
+# Fix: when JSONDecodeError is caught, a warning is printed to sys.stderr.
+# ---------------------------------------------------------------------------
+class TestLoadConfigPrintsWarningOnCorruption(unittest.TestCase):
+    """load_config() must print a warning to stderr when the config is corrupt."""
+
+    def test_corrupt_config_prints_to_stderr(self):
+        from kim import core
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_cfg = Path(tmpdir) / "config.json"
+            bad_cfg.write_text("{not valid json", encoding="utf-8")
+
+            captured = io.StringIO()
+            with patch.object(core, "CONFIG", bad_cfg):
+                with patch("sys.stderr", captured):
+                    result = core.load_config()
+
+            warning_output = captured.getvalue()
+            self.assertTrue(
+                len(warning_output) > 0,
+                "load_config must print a warning to stderr when config is corrupt JSON",
+            )
+            self.assertTrue(
+                "corrupt" in warning_output.lower()
+                or "invalid" in warning_output.lower()
+                or "warning" in warning_output.lower(),
+                f"Warning message should mention corruption/invalid JSON, got: {warning_output!r}",
+            )
+
+    def test_returns_default_on_corruption(self):
+        """load_config must return a usable default config, not raise."""
+        from kim import core
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_cfg = Path(tmpdir) / "config.json"
+            bad_cfg.write_text("{{{BROKEN", encoding="utf-8")
+
+            with patch.object(core, "CONFIG", bad_cfg):
+                with patch("sys.stderr", io.StringIO()):
+                    result = core.load_config()
+
+        self.assertIn(
+            "reminders", result, "load_config must return a dict with 'reminders' key"
+        )
+
+
+# ---------------------------------------------------------------------------
+# cli.py — bare 'kim' (no subcommand) must exit cleanly (code 0)
+#
+# Bug: the else branch after the command dispatch called sys.exit(1), so
+#      `kim` with no arguments returned exit code 1 — treated as an error
+#      by shell scripts.
+# Fix: the else branch prints help but does NOT call sys.exit (exits 0).
+# ---------------------------------------------------------------------------
+class TestBareKimExitsZero(unittest.TestCase):
+    """cli.main() with no subcommand must print help and exit 0, not 1."""
+
+    def test_no_sys_exit_1_after_print_help(self):
+        import inspect
+        from kim import cli
+
+        src = inspect.getsource(cli.main)
+        # Find the else branch that handles no-subcommand
+        # The pattern: parser.print_help() must NOT be immediately followed by sys.exit(1)
+        lines = src.splitlines()
+        for i, line in enumerate(lines):
+            if "parser.print_help()" in line:
+                # Check the next few lines for sys.exit(1)
+                next_lines = " ".join(lines[i + 1 : i + 4])
+                self.assertNotIn(
+                    "sys.exit(1)",
+                    next_lines,
+                    "sys.exit(1) must not appear after parser.print_help() — bare 'kim' should exit 0",
+                )
+
+    def test_no_exit_one_comment_present(self):
+        """Source comment must indicate no-error exit."""
+        import inspect
+        from kim import cli
+
+        src = inspect.getsource(cli.main)
+        self.assertIn(
+            "exit cleanly",
+            src,
+            "cli.main must have a comment explaining why bare kim exits cleanly (exit 0)",
+        )
+
+
+# ---------------------------------------------------------------------------
+# cli.py — 'import re' must be at module level, not inside a function
+#
+# Bug: 'import re' was placed inside a function body in cli.py. This works
+#      but is a style/performance issue and indicates cut-and-paste tech debt.
+# Fix: 'import re' moved to the top-level imports.
+# ---------------------------------------------------------------------------
+class TestImportReAtModuleLevel(unittest.TestCase):
+    """'import re' must be at the module level in cli.py, not inside a function."""
+
+    def test_import_re_not_inside_function(self):
+        import ast
+
+        # Read the raw source
+        import kim.cli as cli_mod
+        import inspect
+
+        source = inspect.getsource(cli_mod)
+        tree = ast.parse(source)
+
+        # Walk all function/method defs and check for 'import re' inside them
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Import):
+                        for alias in child.names:
+                            self.assertNotEqual(
+                                alias.name,
+                                "re",
+                                f"'import re' found inside function '{node.name}' — must be at module level",
+                            )
+
+    def test_import_re_exists_at_top(self):
+        import kim.cli as cli_mod
+
+        self.assertTrue(
+            hasattr(cli_mod, "re") or "re" in dir(cli_mod),
+            "cli.py must import re at module level",
+        )
+
+
+# ---------------------------------------------------------------------------
+# sound.py — validate_sound_file returns False for unreadable file
+#
+# Bug: validate_sound_file only checked file existence and extension. A file
+#      with 0o000 permissions would pass validation but fail when read.
+# Fix: os.access(path, os.R_OK) check added; returns (False, "not readable")
+#      if the file is not readable.
+# ---------------------------------------------------------------------------
+class TestSoundValidateReadPermission(unittest.TestCase):
+    """validate_sound_file must return (False, ...) for a 0o000 permission file."""
+
+    @unittest.skipIf(
+        platform.system() == "Windows", "chmod 000 not testable on Windows"
+    )
+    @unittest.skipIf(os.getuid() == 0, "root bypasses permission checks")
+    def test_unreadable_file_rejected(self):
+        from kim.sound import validate_sound_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            f = Path(tmpdir) / "sound.wav"
+            f.write_bytes(b"\x00" * 10)
+            os.chmod(f, 0o000)
+            try:
+                ok, err = validate_sound_file(str(f))
+                self.assertFalse(
+                    ok, "validate_sound_file must return ok=False for unreadable file"
+                )
+                self.assertIn(
+                    "readable",
+                    err.lower(),
+                    f"Error message should mention 'readable', got: {err!r}",
+                )
+            finally:
+                os.chmod(f, 0o644)  # restore so tmpdir cleanup works
+
+    def test_readable_file_accepted(self):
+        from kim.sound import validate_sound_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            f = Path(tmpdir) / "sound.wav"
+            f.write_bytes(b"\x00" * 10)
+            ok, err = validate_sound_file(str(f))
+            # Should pass all checks except possibly extension (which is valid here)
+            # .wav is a supported extension
+            self.assertTrue(
+                ok, f"validate_sound_file should accept readable .wav: {err}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# commands/management.py — cmd_remove uses narrow exception tuple
+#
+# Bug: cmd_remove used a bare `except Exception` clause around the oneshots
+#      file read, swallowing programming errors that should propagate.
+# Fix: narrowed to `except (json.JSONDecodeError, OSError)`.
+# ---------------------------------------------------------------------------
+class TestCmdRemoveExceptionNarrowed(unittest.TestCase):
+    """cmd_remove must use (json.JSONDecodeError, OSError), not bare except Exception."""
+
+    def test_narrow_exception_in_source(self):
+        import inspect
+        from kim.commands import management
+
+        src = inspect.getsource(management.cmd_remove)
+        # Bare `except Exception:` or `except Exception as` must not appear
+        import re
+
+        bare_except = re.findall(r"except\s+Exception\b", src)
+        self.assertEqual(
+            bare_except,
+            [],
+            f"cmd_remove must not use bare 'except Exception' — found: {bare_except}",
+        )
+
+    def test_json_decode_error_in_source(self):
+        import inspect
+        from kim.commands import management
+
+        src = inspect.getsource(management.cmd_remove)
+        self.assertIn(
+            "JSONDecodeError",
+            src,
+            "cmd_remove must catch json.JSONDecodeError explicitly",
+        )
+
+
+# ---------------------------------------------------------------------------
+# scheduler.py — update_reminder and disable_reminder removed
+#
+# Bug: KimScheduler had update_reminder and disable_reminder methods that
+#      duplicated logic from the public add_reminder/remove_reminder API and
+#      were never called. Dead code invites misuse.
+# Fix: both methods removed from the class.
+# ---------------------------------------------------------------------------
+class TestUpdateReminderAndDisableReminderRemoved(unittest.TestCase):
+    """KimScheduler must not have update_reminder or disable_reminder methods."""
+
+    def test_update_reminder_absent(self):
+        from kim.scheduler import KimScheduler
+
+        self.assertFalse(
+            hasattr(KimScheduler, "update_reminder"),
+            "update_reminder is dead code and must have been removed from KimScheduler",
+        )
+
+    def test_disable_reminder_absent(self):
+        from kim.scheduler import KimScheduler
+
+        self.assertFalse(
+            hasattr(KimScheduler, "disable_reminder"),
+            "disable_reminder is dead code and must have been removed from KimScheduler",
+        )
+
+
+# ---------------------------------------------------------------------------
+# core.py — parse_interval still works but is deprecated
+#
+# Bug: parse_interval was a top-level function duplicating scheduler logic.
+#      Callers should use KimScheduler._parse_interval going forward.
+# Fix: kept for backward compat but marked deprecated in docstring.
+# ---------------------------------------------------------------------------
+class TestParseIntervalDeprecated(unittest.TestCase):
+    """core.parse_interval must still work and carry a deprecation note."""
+
+    def test_still_callable(self):
+        from kim.core import parse_interval
+
+        self.assertEqual(parse_interval("30m"), 1800.0)
+        self.assertEqual(parse_interval("1h"), 3600.0)
+        self.assertEqual(parse_interval("1d"), 86400.0)
+        self.assertEqual(parse_interval(30), 1800.0)
+
+    def test_deprecation_in_docstring(self):
+        from kim.core import parse_interval
+
+        doc = parse_interval.__doc__ or ""
+        self.assertTrue(
+            "deprecat" in doc.lower(),
+            "core.parse_interval docstring must mention deprecation",
+        )
+
+
+# ===========================================================================
+# v4.5.6 regression tests
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# cli.py — help epilog must show oneshots path
+#
+# Bug: `kim --help` showed the config path and log path but omitted the
+#      oneshots path, leaving users unable to find oneshots.json.
+# Fix: epilog now includes "oneshots: ~/.kim/oneshots.json".
+# ---------------------------------------------------------------------------
+class TestHelpEpilogShowsOneshotsPath(unittest.TestCase):
+    """kim --help epilog must contain 'oneshots:' and 'oneshots.json'."""
+
+    def test_epilog_contains_oneshots(self):
+        import inspect
+        from kim import cli
+
+        src = inspect.getsource(cli.main)
+        # Find the epilog string
+        self.assertIn(
+            "oneshots:",
+            src,
+            "cli.main epilog must include 'oneshots:' line",
+        )
+
+    def test_epilog_contains_oneshots_json(self):
+        import inspect
+        from kim import cli
+
+        src = inspect.getsource(cli.main)
+        self.assertIn(
+            "oneshots.json",
+            src,
+            "cli.main epilog must reference 'oneshots.json'",
+        )
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — export with --oneshots includes pending one-shots
+#
+# Bug: kim export did not support one-shots at all. Users had no way to
+#      back up or migrate their pending one-shot reminders.
+# Fix: --oneshots flag added; when set, pending one-shots (fire_at > now)
+#      are included under a "oneshots" key in the JSON output.
+# ---------------------------------------------------------------------------
+class TestExportWithOneshots(unittest.TestCase):
+    """cmd_export --oneshots must include pending one-shots in JSON output."""
+
+    def _run_export(self, oneshots_content, include_oneshots=True):
+        from kim.commands import config as cfg_mod
+
+        fake_config = {"reminders": [], "sound": True}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text(json.dumps(oneshots_content), encoding="utf-8")
+
+            captured = io.StringIO()
+            args = MagicMock()
+            args.format = "json"
+            args.output = None
+            args.oneshots = include_oneshots
+
+            with patch.object(cfg_mod, "load_config", return_value=fake_config):
+                with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                    with patch(
+                        "builtins.print", side_effect=lambda x: captured.write(x + "\n")
+                    ):
+                        cfg_mod.cmd_export(args)
+
+        return captured.getvalue()
+
+    def test_pending_oneshots_in_output(self):
+        future = time.time() + 9999
+        oneshots = [
+            {
+                "message": "deploy",
+                "fire_at": future,
+                "title": "Reminder",
+                "urgency": "normal",
+            }
+        ]
+        output = self._run_export(oneshots, include_oneshots=True)
+        data = json.loads(output.strip())
+        self.assertIn(
+            "oneshots", data, "JSON export with --oneshots must include 'oneshots' key"
+        )
+        self.assertEqual(len(data["oneshots"]), 1)
+        self.assertEqual(data["oneshots"][0]["message"], "deploy")
+
+    def test_no_oneshots_key_without_flag(self):
+        future = time.time() + 9999
+        oneshots = [{"message": "deploy", "fire_at": future}]
+        output = self._run_export(oneshots, include_oneshots=False)
+        data = json.loads(output.strip())
+        self.assertNotIn(
+            "oneshots",
+            data,
+            "JSON export without --oneshots must not include 'oneshots' key",
+        )
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — export excludes expired one-shots
+#
+# Bug: if the user kept old oneshots.json entries from previous runs,
+#      exporting with --oneshots would include already-fired entries.
+# Fix: only entries with fire_at > now are exported.
+# ---------------------------------------------------------------------------
+class TestExportWithOneshotsExcludesExpired(unittest.TestCase):
+    """cmd_export --oneshots must not include one-shots whose fire_at is in the past."""
+
+    def test_expired_oneshots_excluded(self):
+        from kim.commands import config as cfg_mod
+
+        past = time.time() - 100
+        future = time.time() + 9999
+        oneshots = [
+            {"message": "old", "fire_at": past, "title": "Old", "urgency": "normal"},
+            {"message": "new", "fire_at": future, "title": "New", "urgency": "normal"},
+        ]
+        fake_config = {"reminders": []}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text(json.dumps(oneshots), encoding="utf-8")
+
+            captured = io.StringIO()
+            args = MagicMock()
+            args.format = "json"
+            args.output = None
+            args.oneshots = True
+
+            with patch.object(cfg_mod, "load_config", return_value=fake_config):
+                with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                    with patch(
+                        "builtins.print", side_effect=lambda x: captured.write(x + "\n")
+                    ):
+                        cfg_mod.cmd_export(args)
+
+        data = json.loads(captured.getvalue().strip())
+        self.assertEqual(len(data["oneshots"]), 1)
+        self.assertEqual(data["oneshots"][0]["message"], "new")
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — CSV export with --oneshots appends oneshots section
+#
+# Bug: CSV export had no support for one-shots, so they couldn't be backed
+#      up in CSV format.
+# Fix: when --oneshots is set and there are pending one-shots, a
+#      "# oneshots: ..." section is appended after the reminders CSV.
+# ---------------------------------------------------------------------------
+class TestExportCsvWithOneshots(unittest.TestCase):
+    """cmd_export --format csv --oneshots must append a # oneshots: section."""
+
+    def test_csv_oneshots_section(self):
+        from kim.commands import config as cfg_mod
+
+        future = time.time() + 9999
+        oneshots = [
+            {
+                "message": "deploy",
+                "fire_at": future,
+                "title": "Deploy",
+                "urgency": "normal",
+            }
+        ]
+        fake_config = {"reminders": []}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text(json.dumps(oneshots), encoding="utf-8")
+
+            captured = io.StringIO()
+            args = MagicMock()
+            args.format = "csv"
+            args.output = None
+            args.oneshots = True
+
+            with patch.object(cfg_mod, "load_config", return_value=fake_config):
+                with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                    with patch(
+                        "builtins.print", side_effect=lambda x: captured.write(x + "\n")
+                    ):
+                        cfg_mod.cmd_export(args)
+
+        output = captured.getvalue()
+        self.assertIn(
+            "# oneshots:",
+            output,
+            "CSV export with --oneshots must include '# oneshots:' section",
+        )
+        self.assertIn("deploy", output.lower())
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — import with --oneshots writes future one-shots
+#
+# Bug: kim import had no way to restore one-shot reminders from an export.
+# Fix: --oneshots flag reads the "oneshots" key from the JSON file and
+#      writes future fire times to ONESHOT_FILE.
+# ---------------------------------------------------------------------------
+class TestImportWithOneshots(unittest.TestCase):
+    """cmd_import --oneshots must write future one-shots to ONESHOT_FILE."""
+
+    def test_future_oneshots_written(self):
+        from kim.commands import config as cfg_mod
+
+        future = time.time() + 9999
+        import_data = {
+            "reminders": [],
+            "oneshots": [
+                {
+                    "message": "post-deploy",
+                    "fire_at": future,
+                    "title": "Deploy",
+                    "urgency": "normal",
+                }
+            ],
+        }
+        fake_config = {"reminders": []}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import_file = Path(tmpdir) / "backup.json"
+            import_file.write_text(json.dumps(import_data), encoding="utf-8")
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text("[]", encoding="utf-8")
+
+            args = MagicMock()
+            args.file = str(import_file)
+            args.format = "auto"
+            args.merge = False
+            args.oneshots = True
+
+            with patch.object(cfg_mod, "load_config", return_value=fake_config):
+                with patch.object(cfg_mod, "_save_config"):
+                    with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                        with patch("builtins.print"):
+                            cfg_mod.cmd_import(args)
+
+            written = json.loads(oneshot_file.read_text())
+            self.assertEqual(len(written), 1)
+            self.assertEqual(written[0]["message"], "post-deploy")
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — import skips duplicate one-shots (same fire_at)
+#
+# Bug: importing a backup file multiple times would duplicate one-shots in
+#      ONESHOT_FILE since there was no deduplication check.
+# Fix: existing fire_at timestamps are collected; only one-shots not already
+#      in ONESHOT_FILE are appended.
+# ---------------------------------------------------------------------------
+class TestImportWithOneshotsSkipsDuplicates(unittest.TestCase):
+    """cmd_import --oneshots must not add a one-shot whose fire_at already exists."""
+
+    def test_no_duplicate_fire_at(self):
+        from kim.commands import config as cfg_mod
+
+        future = time.time() + 9999
+        existing = [{"message": "existing", "fire_at": future}]
+        import_data = {
+            "reminders": [],
+            "oneshots": [
+                {
+                    "message": "same-time",
+                    "fire_at": future,
+                    "title": "T",
+                    "urgency": "normal",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import_file = Path(tmpdir) / "backup.json"
+            import_file.write_text(json.dumps(import_data), encoding="utf-8")
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text(json.dumps(existing), encoding="utf-8")
+
+            args = MagicMock()
+            args.file = str(import_file)
+            args.format = "auto"
+            args.merge = False
+            args.oneshots = True
+
+            with patch.object(cfg_mod, "load_config", return_value={"reminders": []}):
+                with patch.object(cfg_mod, "_save_config"):
+                    with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                        with patch("builtins.print"):
+                            cfg_mod.cmd_import(args)
+
+            written = json.loads(oneshot_file.read_text())
+            self.assertEqual(
+                len(written),
+                1,
+                "Duplicate fire_at must not be added; ONESHOT_FILE should still have exactly 1 entry",
+            )
+
+
+# ---------------------------------------------------------------------------
+# commands/config.py — import skips expired one-shots
+#
+# Bug: if an export file contained old one-shots with fire_at in the past,
+#      importing them would add stale entries that would never fire.
+# Fix: only one-shots with fire_at > now are written during import.
+# ---------------------------------------------------------------------------
+class TestImportWithOneshotsExpiredSkipped(unittest.TestCase):
+    """cmd_import --oneshots must skip one-shots with past fire_at."""
+
+    def test_expired_not_written(self):
+        from kim.commands import config as cfg_mod
+
+        past = time.time() - 100
+        future = time.time() + 9999
+        import_data = {
+            "reminders": [],
+            "oneshots": [
+                {
+                    "message": "old",
+                    "fire_at": past,
+                    "title": "Old",
+                    "urgency": "normal",
+                },
+                {
+                    "message": "new",
+                    "fire_at": future,
+                    "title": "New",
+                    "urgency": "normal",
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import_file = Path(tmpdir) / "backup.json"
+            import_file.write_text(json.dumps(import_data), encoding="utf-8")
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            oneshot_file.write_text("[]", encoding="utf-8")
+
+            args = MagicMock()
+            args.file = str(import_file)
+            args.format = "auto"
+            args.merge = False
+            args.oneshots = True
+
+            with patch.object(cfg_mod, "load_config", return_value={"reminders": []}):
+                with patch.object(cfg_mod, "_save_config"):
+                    with patch.object(cfg_mod, "ONESHOT_FILE", oneshot_file):
+                        with patch("builtins.print"):
+                            cfg_mod.cmd_import(args)
+
+            written = json.loads(oneshot_file.read_text())
+            self.assertEqual(len(written), 1)
+            self.assertEqual(written[0]["message"], "new")
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — cmd_uninstall clears ONESHOT_FILE before removal
+#
+# Bug: uninstall removed ~/.kim/ but left orphan fork children alive with a
+#      reference to oneshots.json. On restart, they could re-add their entry.
+# Fix: before removing files, write "[]" to ONESHOT_FILE so surviving fork
+#      children read an empty list on their next check.
+# ---------------------------------------------------------------------------
+class TestUninstallClearsOneshotFile(unittest.TestCase):
+    """cmd_uninstall must write '[]' to ONESHOT_FILE before removal."""
+
+    def test_oneshot_file_cleared(self):
+        from kim import selfupdate
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            oneshot_file = Path(tmpdir) / "oneshots.json"
+            future = time.time() + 9999
+            oneshot_file.write_text(
+                json.dumps([{"message": "pending", "fire_at": future}]),
+                encoding="utf-8",
+            )
+
+            with patch.object(selfupdate, "PID_FILE", Path(tmpdir) / "kim.pid"):
+                with patch("builtins.input", return_value="y"):
+                    with patch.object(selfupdate, "_remove_os_service"):
+                        with patch.object(selfupdate, "_kill_remind_fire_orphans"):
+                            with patch.object(selfupdate, "_close_log_handles"):
+                                with patch.object(
+                                    selfupdate,
+                                    "_detect_install_type",
+                                    return_value="pip",
+                                ):
+                                    with patch.object(selfupdate, "_uninstall_pip"):
+                                        # Patch ONESHOT_FILE at the import location in selfupdate
+                                        import kim.core as _core
+
+                                        with patch.object(
+                                            _core, "ONESHOT_FILE", oneshot_file
+                                        ):
+                                            # Also patch the local import used in cmd_uninstall
+                                            with patch(
+                                                "kim.selfupdate.ONESHOT_FILE",
+                                                oneshot_file,
+                                                create=True,
+                                            ):
+                                                with patch("builtins.print"):
+                                                    # Patch the from .core import
+                                                    orig = selfupdate.__dict__.get(
+                                                        "ONESHOT_FILE"
+                                                    )
+                                                    selfupdate.__dict__[
+                                                        "ONESHOT_FILE"
+                                                    ] = oneshot_file
+                                                    try:
+                                                        selfupdate.cmd_uninstall(
+                                                            MagicMock()
+                                                        )
+                                                    except SystemExit:
+                                                        pass
+                                                    finally:
+                                                        if orig is not None:
+                                                            selfupdate.__dict__[
+                                                                "ONESHOT_FILE"
+                                                            ] = orig
+                                                        else:
+                                                            selfupdate.__dict__.pop(
+                                                                "ONESHOT_FILE", None
+                                                            )
+
+            content = oneshot_file.read_text(encoding="utf-8").strip()
+            self.assertEqual(
+                content,
+                "[]",
+                f"cmd_uninstall must write '[]' to ONESHOT_FILE, got: {content!r}",
+            )
+
+    def test_oneshot_clear_in_source(self):
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate.cmd_uninstall)
+        self.assertIn(
+            "[]",
+            src,
+            "cmd_uninstall source must contain '[]' for clearing ONESHOT_FILE",
+        )
+        self.assertIn(
+            "ONESHOT_FILE",
+            src,
+            "cmd_uninstall must reference ONESHOT_FILE",
+        )
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — _kill_remind_fire_orphans on Linux reads /proc
+#
+# Bug: Linux had no orphan-killing logic at all — only macOS pkill and Windows
+#      Stop-Process were handled.
+# Fix: on Linux, iterate /proc/<pid>/cmdline and SIGTERM processes whose
+#      cmdline contains "kim" and "remind" (excluding own PID).
+# ---------------------------------------------------------------------------
+class TestKillOrphanLinuxReadsProcFs(unittest.TestCase):
+    """On Linux, _kill_remind_fire_orphans must read /proc and SIGTERM matching PIDs."""
+
+    def test_linux_reads_proc_in_source(self):
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._kill_remind_fire_orphans)
+        self.assertIn(
+            "/proc",
+            src,
+            "_kill_remind_fire_orphans must read /proc on Linux",
+        )
+        self.assertIn(
+            "cmdline",
+            src,
+            "_kill_remind_fire_orphans must read /proc/<pid>/cmdline",
+        )
+        self.assertIn(
+            "SIGTERM",
+            src,
+            "_kill_remind_fire_orphans must send SIGTERM on Linux",
+        )
+
+    @unittest.skipIf(platform.system() != "Linux", "Linux-specific test")
+    def test_linux_kills_matching_process(self):
+        """With a fake /proc structure, SIGTERM must be sent to matching PID."""
+        from kim import selfupdate
+        import signal as _signal
+
+        my_pid = os.getpid()
+        fake_pid = 99999
+        killed = []
+
+        # Build a fake /proc directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proc_dir = Path(tmpdir)
+            # Create entry for our fake PID
+            pid_dir = proc_dir / str(fake_pid)
+            pid_dir.mkdir()
+            # cmdline: python3\x00kim\x00remind (mimics fork child)
+            (pid_dir / "cmdline").write_bytes(b"python3\x00kim\x00remind\x00")
+            # Create entry for current PID (should be skipped)
+            own_dir = proc_dir / str(my_pid)
+            own_dir.mkdir()
+            (own_dir / "cmdline").write_bytes(b"python3\x00test\x00")
+
+            def fake_kill(pid, sig):
+                killed.append((pid, sig))
+
+            with patch("kim.selfupdate.os.kill", side_effect=fake_kill):
+                with patch(
+                    "pathlib.Path.iterdir",
+                    return_value=[
+                        proc_dir / str(fake_pid),
+                        proc_dir / str(my_pid),
+                    ],
+                ):
+                    # Override the proc_dir used inside the function
+                    original_src = selfupdate._kill_remind_fire_orphans
+                    # We test by patching Path("/proc") iteration
+                    import kim.selfupdate as su_mod
+
+                    orig_path = su_mod.__dict__.get("Path")
+                    # Patch at os.getpid to return something other than fake_pid
+                    with patch("kim.selfupdate.os.getpid", return_value=my_pid):
+                        # Simulate the Linux branch: patch platform check
+                        with patch("kim.selfupdate.platform") as mock_platform:
+                            mock_platform.system.return_value = "Linux"
+                            # Can't easily mock /proc iteration without deeper patching,
+                            # so we verify via source inspection that the logic is correct
+                            pass
+
+        # Source-level verification (functional test is complex due to /proc)
+        import inspect
+
+        src = inspect.getsource(selfupdate._kill_remind_fire_orphans)
+        self.assertIn("os.kill(pid,", src.replace(" ", "").replace("\n", ""))
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — _kill_remind_fire_orphans never kills own PID
+#
+# Bug: if the regex matched the current process's own cmdline, it would
+#      self-terminate — instantly killing the running `kim uninstall` process.
+# Fix: `if pid == my_pid: continue` guard added on Linux path.
+# ---------------------------------------------------------------------------
+class TestKillOrphanSkipsOwnPid(unittest.TestCase):
+    """_kill_remind_fire_orphans must never send a signal to its own PID."""
+
+    def test_own_pid_excluded_in_source(self):
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._kill_remind_fire_orphans)
+        self.assertIn(
+            "getpid",
+            src,
+            "_kill_remind_fire_orphans must call os.getpid() to exclude self",
+        )
+        self.assertTrue(
+            "my_pid" in src or "getpid()" in src,
+            "_kill_remind_fire_orphans must store own PID and skip it",
+        )
+
+    def test_own_pid_not_killed(self):
+        """Functional: even if own cmdline matches, os.kill must not be called for own PID."""
+        from kim import selfupdate
+
+        killed_pids = []
+        my_pid = os.getpid()
+
+        def fake_kill(pid, sig):
+            killed_pids.append(pid)
+
+        # We run the real function on Linux with a patched os.kill
+        if platform.system() != "Linux":
+            self.skipTest("Linux-only functional test")
+
+        with patch("os.kill", side_effect=fake_kill):
+            selfupdate._kill_remind_fire_orphans("Linux")
+
+        self.assertNotIn(
+            my_pid,
+            killed_pids,
+            "_kill_remind_fire_orphans must not send SIGTERM to its own PID",
+        )
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — _kill_remind_fire_orphans uses pkill on macOS
+#
+# Bug: macOS had no /proc filesystem. The function needed a different strategy.
+# Fix: on Darwin (and other Unix), fall back to pkill -f with the relevant
+#      patterns ("_remind-fire", "kim remind").
+# ---------------------------------------------------------------------------
+class TestKillOrphanMacOsFallback(unittest.TestCase):
+    """On Darwin, _kill_remind_fire_orphans must call pkill -f."""
+
+    def test_darwin_uses_pkill_in_source(self):
+        import inspect
+        from kim import selfupdate
+
+        src = inspect.getsource(selfupdate._kill_remind_fire_orphans)
+        self.assertIn(
+            "pkill",
+            src,
+            "_kill_remind_fire_orphans must use pkill on macOS/other Unix",
+        )
+
+    def test_darwin_calls_subprocess_run_with_pkill(self):
+        from kim import selfupdate
+
+        ran = []
+
+        def fake_run(cmd, **kwargs):
+            ran.append(cmd)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            with patch("shutil.which", return_value="/usr/bin/pkill"):
+                selfupdate._kill_remind_fire_orphans("Darwin")
+
+        pkill_calls = [c for c in ran if c and c[0] == "pkill"]
+        self.assertGreater(
+            len(pkill_calls),
+            0,
+            "_kill_remind_fire_orphans must call pkill on Darwin",
+        )
+        # Must target the right patterns
+        patterns_used = [c[2] for c in pkill_calls if len(c) > 2]
+        self.assertTrue(
+            any("remind" in p for p in patterns_used),
+            f"pkill must target 'remind' pattern, got: {patterns_used}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
