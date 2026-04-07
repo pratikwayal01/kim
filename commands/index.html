@@ -721,17 +721,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#graphical-ui-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Graphical UI (optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#self-update-uninstall" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1096,17 +1085,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#graphical-ui-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Graphical UI (optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#self-update-uninstall" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1379,23 +1357,6 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>kim<span class="w"> </span>interactive<span class="w">   </span><span class="c1"># or kim -i</span>
 </code></pre></div>
 <p>A text-based UI for managing reminders. Use arrow keys to navigate, Enter to select.</p>
-<h2 id="graphical-ui-optional">Graphical UI (optional)<a class="headerlink" href="#graphical-ui-optional" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kim<span class="w"> </span>ui
-</code></pre></div>
-<p>Opens a native-looking desktop management window with a system tray icon.</p>
-<p><strong>Requires PySide6</strong> — install with:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>pip<span class="w"> </span>install<span class="w"> </span>kim-reminder<span class="o">[</span>ui<span class="o">]</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1"># or</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>pip<span class="w"> </span>install<span class="w"> </span>PySide6
-</code></pre></div></p>
-<p><strong>Features:</strong>
-- <strong>Reminders tab</strong> — add, edit, remove, enable/disable recurring reminders
-- <strong>One-shots tab</strong> — view all pending one-shots with countdown; cancel any entry
-- <strong>▶ Start / ■ Stop daemon</strong> buttons in the toolbar
-- <strong>⏰ One-shot</strong> button — schedule a one-shot from a dialog (relative delay or absolute date+time with AM/PM)
-- System tray icon: green dot = daemon running, red = stopped; right-click for quick actions
-- Auto-refreshes every 3 seconds when config or daemon state changes</p>
-<p>PySide6 is an <strong>optional dependency</strong> — the core daemon and CLI work with zero dependencies without it.</p>
 <h2 id="self-update-uninstall">Self-Update &amp; Uninstall<a class="headerlink" href="#self-update-uninstall" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1416,16 +1377,16 @@
 </tbody>
 </table>
 <h3 id="kim-self-update"><code>kim self-update</code><a class="headerlink" href="#kim-self-update" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>kim<span class="w"> </span>self-update<span class="w"> </span><span class="o">[</span>-f<span class="o">]</span><span class="w">   </span><span class="c1"># Skip confirmation prompt</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kim<span class="w"> </span>self-update<span class="w"> </span><span class="o">[</span>-f<span class="o">]</span><span class="w">   </span><span class="c1"># Skip confirmation prompt</span>
 </code></pre></div>
 <h2 id="shell-completions">Shell Completions<a class="headerlink" href="#shell-completions" title="Permanent link">&para;</a></h2>
 <p>Generate shell completions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="w">   </span><span class="c1"># Bash</span>
-<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>kim<span class="w"> </span>completion<span class="w"> </span>zsh<span class="w">    </span><span class="c1"># Zsh  </span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>kim<span class="w"> </span>completion<span class="w"> </span>fish<span class="w">   </span><span class="c1"># Fish</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="w">   </span><span class="c1"># Bash</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>kim<span class="w"> </span>completion<span class="w"> </span>zsh<span class="w">    </span><span class="c1"># Zsh  </span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>kim<span class="w"> </span>completion<span class="w"> </span>fish<span class="w">   </span><span class="c1"># Fish</span>
 </code></pre></div>
 <p>Add to your shell config (e.g., <code>.bashrc</code>):
-<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="k">)</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>kim<span class="w"> </span>completion<span class="w"> </span>bash<span class="k">)</span><span class="s2">&quot;</span>
 </code></pre></div></p>
 
 
