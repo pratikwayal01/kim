@@ -6,13 +6,15 @@
 ## Features
 
 - **Cross-platform**: Linux, macOS, Windows
-- **Pure Python stdlib** — no pip installs
+- **Pure Python stdlib** — no pip installs (GUI is optional: `pip install kim-reminder[ui]`)
 - **Low memory**: All reminders run on a single `heapq` scheduler thread (~0.02 MB flat)
 - **Config-driven**: JSON configuration file
 - **Notifications**: System notifications via native APIs
 - **Sound**: Custom sound files or system default
 - **Slack integration**: Webhook or bot token
 - **One-shot reminders**: `kim remind "standup" in 10m` — persisted to disk, survives reboots
+- **Remove by index**: `kim remove 2` or `kim remove 1 -o` — no need to type full names
+- **Graphical UI**: `kim ui` — native desktop window + system tray (requires PySide6)
 - **Interactive mode**: TUI for managing reminders
 - **Self-update**: Automatic updates from GitHub releases
 

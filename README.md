@@ -45,16 +45,17 @@ That's it. kim starts automatically on login.
 kim start          Start the daemon
 kim stop           Stop the daemon
 kim status         Show running reminders
-kim list           List all reminders from config
+kim list           List all reminders from config  (shows index #)
 kim logs           Tail the log file
 kim edit           Open config in $EDITOR
 kim add            Add a new reminder
-kim remove         Remove a reminder
+kim remove         Remove a reminder  (by name or index)
 kim enable         Enable a reminder
 kim disable        Disable a reminder
 kim update         Update a reminder
 kim remind         Fire a one-shot reminder after a delay or at a time
 kim interactive    Enter interactive mode (-i)
+kim ui             Open graphical manager  (requires: pip install kim-reminder[ui])
 kim self-update    Check for and install updates
 kim uninstall      Uninstall kim completely
 kim export         Export reminders to file
@@ -106,6 +107,29 @@ kim remind "wake up!" in 5m --urgency critical
 Fires once, runs in the background, frees your terminal immediately.
 
 **Persistent** — one-shot reminders survive daemon restarts and system reboots. Stored in `~/.kim/oneshots.json` and loaded automatically when the daemon starts. Expired reminders are cleaned up on next startup.
+
+### Removing reminders
+
+Both recurring and one-shot reminders can be removed by **name** or **index**:
+
+```bash
+# Recurring — by name or index shown in `kim list`
+kim remove water
+kim remove 2          # remove 2nd reminder by index
+
+# One-shot — by index or message substring (from `kim list -o`)
+kim remove 1 -o       # cancel 1st pending one-shot
+kim remove "standup" -o
+```
+
+### Graphical UI (optional)
+
+```bash
+pip install kim-reminder[ui]   # or: uv pip install -e ".[ui]"
+kim ui
+```
+
+A native-looking desktop window with system tray icon. Manage recurring reminders, view and cancel pending one-shots, start/stop the daemon — all without touching the terminal.
 
 ---
 
@@ -205,7 +229,7 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 | macOS | launchd agent | `osascript` |
 | Windows | Task Scheduler | PowerShell toast |
 
-- **Pure Python stdlib** — no pip installs
+- **Pure Python stdlib** — no pip installs (UI is optional: `pip install kim-reminder[ui]`)
 - **Zero config** — works out of the box, creates default config on first run
 - All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
 - Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
@@ -214,13 +238,13 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 
 ## Why kim?
 
-| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | Self-update | Export/Import |
-|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-------------|---------------|
-| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
-| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ⚠️ |
-| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
+| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | GUI | Self-update | Export/Import |
+|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-----|-------------|---------------|
+| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ |
+| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ |
 
 ---
 
@@ -233,3 +257,4 @@ kim uninstall
 ---
 
 *Start small. Keep it in mind.*
+

@@ -122,8 +122,26 @@ def cmd_remove(args):
 
     config = load_config()
     name = args.name
-
     reminders = config.get("reminders", [])
+
+    # Index-based removal: if token is a positive integer treat it as 1-based index
+    if name.isdigit():
+        n = int(name)
+        if 1 <= n <= len(reminders):
+            removed = reminders.pop(n - 1)
+            config["reminders"] = reminders
+            _save_config(config)
+            _signal_reload()
+            print(f"{CHECK} Removed reminder '{removed.get('name', '')}'")
+            log.info("Removed reminder by index %d: %s", n, removed.get("name", ""))
+            return
+        else:
+            print(
+                f"Index {n} out of range. "
+                f"Run 'kim list' to see reminders (1–{len(reminders)})."
+            )
+            sys.exit(1)
+
     initial_count = len(reminders)
     config["reminders"] = [r for r in reminders if r.get("name") != name]
 
