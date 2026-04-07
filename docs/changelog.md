@@ -5,15 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.5.7] - 2026-04-07
+
+### Added
+- **`kim remove <N>`** — remove a recurring reminder by 1-based index as shown in `kim list`. Existing name-based removal still works unchanged.
+- **`kim list` shows `#` index column** — recurring reminders now display a 1-based index so users know what number to pass to `kim remove`.
 
 ## [4.5.6] - 2026-04-07
 
 ### Added
-- **`kim remove <N>`** — remove a recurring reminder by 1-based index as shown in `kim list`. Existing name-based removal still works unchanged.
-- **`kim remove <N> -o`** — remove a pending one-shot by index already worked; now the same index behaviour is consistent across both reminder types.
-- **`kim list` shows `#` index column** — recurring reminders now display a 1-based index so users know what number to pass to `kim remove`.
-- **Graphical UI (`kim ui`)** — optional PySide6 desktop application. Install with `pip install kim-reminder[ui]`. Features: Reminders tab (add/edit/remove/enable/disable), One-shots tab (view pending + cancel), ▶ Start / ■ Stop daemon buttons, ⏰ One-shot dialog (relative delay or absolute date+time with AM/PM), system tray icon with green/red status dot. Zero impact on core CLI/daemon — PySide6 is never imported unless `kim ui` is explicitly run.
 - **`kim export --oneshots`** — include pending one-shot reminders in the export (JSON: `"oneshots"` array; CSV: appended section). Use with `-o file` to save to a file.
 - **`kim import --oneshots`** — restore pending one-shot reminders from a file produced by `kim export --oneshots`. Only future fire times are imported; duplicates are skipped.
 - **Help footer** now shows `oneshots: ~/.kim/oneshots.json` alongside the config and log paths.

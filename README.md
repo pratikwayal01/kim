@@ -55,7 +55,6 @@ kim disable        Disable a reminder
 kim update         Update a reminder
 kim remind         Fire a one-shot reminder after a delay or at a time
 kim interactive    Enter interactive mode (-i)
-kim ui             Open graphical manager  (requires: pip install kim-reminder[ui])
 kim self-update    Check for and install updates
 kim uninstall      Uninstall kim completely
 kim export         Export reminders to file
@@ -121,15 +120,6 @@ kim remove 2          # remove 2nd reminder by index
 kim remove 1 -o       # cancel 1st pending one-shot
 kim remove "standup" -o
 ```
-
-### Graphical UI (optional)
-
-```bash
-pip install kim-reminder[ui]   # or: uv pip install -e ".[ui]"
-kim ui
-```
-
-A native-looking desktop window with system tray icon. Manage recurring reminders, view and cancel pending one-shots, start/stop the daemon — all without touching the terminal.
 
 ---
 
@@ -229,7 +219,7 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 | macOS | launchd agent | `osascript` |
 | Windows | Task Scheduler | PowerShell toast |
 
-- **Pure Python stdlib** — no pip installs (UI is optional: `pip install kim-reminder[ui]`)
+- **Pure Python stdlib** — no pip installs
 - **Zero config** — works out of the box, creates default config on first run
 - All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
 - Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
@@ -238,13 +228,13 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 
 ## Why kim?
 
-| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | GUI | Self-update | Export/Import |
-|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-----|-------------|---------------|
-| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ |
-| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ |
+| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | Self-update | Export/Import |
+|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-------------|---------------|
+| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ⚠️ |
+| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
 
 ---
 
@@ -257,4 +247,3 @@ kim uninstall
 ---
 
 *Start small. Keep it in mind.*
-
