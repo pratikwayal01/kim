@@ -244,6 +244,27 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 kim uninstall
 ```
 
+If `kim` is broken or the above doesn't work, use the standalone uninstaller:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/uninstall.sh | bash
+```
+
+**Last resort** — manually remove all kim files:
+
+```bash
+# Stop daemon
+[ -f ~/.kim/kim.pid ] && kill $(cat ~/.kim/kim.pid) 2>/dev/null; true
+# Remove binary, package, and data
+rm -f ~/.local/bin/kim
+rm -rf ~/.kim
+# Remove autostart (Linux)
+systemctl --user disable --now kim.service 2>/dev/null; true
+rm -f ~/.config/systemd/user/kim.service
+# Remove pip metadata if installed via pip
+pip uninstall kim-reminder -y 2>/dev/null; true
+```
+
 ---
 
 *Start small. Keep it in mind.*

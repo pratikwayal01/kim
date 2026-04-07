@@ -26,13 +26,21 @@ ARCH="$(uname -m)"
 # ── --uninstall flag (pure bash, works even when kim is broken) ────────────────
 if [[ "${1:-}" == "--uninstall" ]]; then
     _header "Uninstalling kim"
-    printf "This will remove kim data, binaries, and autostart config.\nContinue? (y/N): "
-    if [[ -t 0 ]]; then
-        read -r confirm
-    else
-        read -r confirm < /dev/tty
+
+    # -y / --yes as second arg skips the prompt
+    SKIP_CONFIRM=0
+    [[ "${2:-}" == "-y" || "${2:-}" == "--yes" ]] && SKIP_CONFIRM=1
+
+    if [[ "$SKIP_CONFIRM" == "0" ]]; then
+        printf "This will remove kim data, binaries, and autostart config.\nContinue? (y/N): "
+        # Read from /dev/tty so this works when piped from curl
+        if [[ -t 0 ]]; then
+            read -r confirm
+        else
+            read -r confirm < /dev/tty
+        fi
+        [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
     fi
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
 
     # Stop any running daemon
     if [[ -f "$KIM_DIR/kim.pid" ]]; then
@@ -62,6 +70,13 @@ if [[ "${1:-}" == "--uninstall" ]]; then
             _ok "Removed launchd agent"
             ;;
     esac
+
+    # Remove pip package metadata if present
+    if command -v python3 &>/dev/null; then
+        python3 -m pip uninstall --break-system-packages kim-reminder -y \
+            2>/dev/null || true
+        _ok "Removed pip package metadata (if present)"
+    fi
 
     # Remove binary shim
     rm -f "$BIN_DIR/kim"
