@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.8] - 2026-04-07
+
+### Fixed
+- **`kim uninstall` now removes install-script binary** — `_detect_install_type()` verifies the binary on PATH is in pip's RECORD before returning `"pip"`. Orphaned pip metadata from a prior `pip install` no longer causes the uninstaller to skip `~/.local/bin/kim`.
+- **`install.sh --uninstall` works when piped from curl** — reads confirmation from `/dev/tty` instead of stdin.
+- **Both shell uninstall paths clean up orphaned pip metadata** — silently runs `pip uninstall kim-reminder` as part of cleanup.
+
+### Added
+- **`uninstall.sh`** — standalone uninstall script. Works independently of `install.sh`, supports `-y`/`--yes` to skip confirmation. Usage: `curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/uninstall.sh | bash`
+- **`-y`/`--yes` flag** for `install.sh --uninstall` skips the confirmation prompt.
+
 ## [4.5.7] - 2026-04-07
 
 ### Added
