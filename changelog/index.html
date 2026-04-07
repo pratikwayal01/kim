@@ -2053,6 +2053,10 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 <h2 id="456-2026-04-07">[4.5.6] - 2026-04-07<a class="headerlink" href="#456-2026-04-07" title="Permanent link">&para;</a></h2>
 <h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
 <ul>
+<li><strong><code>kim remove &lt;N&gt;</code></strong> — remove a recurring reminder by 1-based index as shown in <code>kim list</code>. Existing name-based removal still works unchanged.</li>
+<li><strong><code>kim remove &lt;N&gt; -o</code></strong> — remove a pending one-shot by index already worked; now the same index behaviour is consistent across both reminder types.</li>
+<li><strong><code>kim list</code> shows <code>#</code> index column</strong> — recurring reminders now display a 1-based index so users know what number to pass to <code>kim remove</code>.</li>
+<li><strong>Graphical UI (<code>kim ui</code>)</strong> — optional PySide6 desktop application. Install with <code>pip install kim-reminder[ui]</code>. Features: Reminders tab (add/edit/remove/enable/disable), One-shots tab (view pending + cancel), ▶ Start / ■ Stop daemon buttons, ⏰ One-shot dialog (relative delay or absolute date+time with AM/PM), system tray icon with green/red status dot. Zero impact on core CLI/daemon — PySide6 is never imported unless <code>kim ui</code> is explicitly run.</li>
 <li><strong><code>kim export --oneshots</code></strong> — include pending one-shot reminders in the export (JSON: <code>"oneshots"</code> array; CSV: appended section). Use with <code>-o file</code> to save to a file.</li>
 <li><strong><code>kim import --oneshots</code></strong> — restore pending one-shot reminders from a file produced by <code>kim export --oneshots</code>. Only future fire times are imported; duplicates are skipped.</li>
 <li><strong>Help footer</strong> now shows <code>oneshots: ~/.kim/oneshots.json</code> alongside the config and log paths.</li>
