@@ -27,7 +27,11 @@ ARCH="$(uname -m)"
 if [[ "${1:-}" == "--uninstall" ]]; then
     _header "Uninstalling kim"
     printf "This will remove kim data, binaries, and autostart config.\nContinue? (y/N): "
-    read -r confirm
+    if [[ -t 0 ]]; then
+        read -r confirm
+    else
+        read -r confirm < /dev/tty
+    fi
     [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "Cancelled."; exit 0; }
 
     # Stop any running daemon
