@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.5.7] - 2026-04-07
+
+### Added
+- **`kim remove <N>`** — remove a recurring reminder by 1-based index as shown in `kim list`. Existing name-based removal still works unchanged.
+- **`kim list` shows `#` index column** — recurring reminders now display a 1-based index so users know what number to pass to `kim remove`.
 
 ## [4.5.6] - 2026-04-07
 

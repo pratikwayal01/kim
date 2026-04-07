@@ -1,7 +1,7 @@
 # kim — keep in mind 🧠
 
 > Lightweight cross-platform reminder daemon for developers.  
-> No UI. Config-driven. Runs in the background.
+> UI optional. Config-driven. Runs in the background.
 
 ## Features
 
