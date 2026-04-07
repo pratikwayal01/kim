@@ -2177,5 +2177,109 @@ class TestRemoveAutoDetectsOneshots(unittest.TestCase):
         self.assertIn("_remove_oneshot", src)
 
 
+# ---------------------------------------------------------------------------
+# management.py — index-based removal for recurring reminders (v4.5.6+)
+# ---------------------------------------------------------------------------
+class TestRemoveByIndex(unittest.TestCase):
+    """
+    kim remove <N> removes the Nth recurring reminder by 1-based index.
+
+    Bug this catches: before index support, users had to type the full name.
+    A digit-only argument would fall through to name-match (finding nothing)
+    and then auto-try one-shots, making index removal impossible for recurring
+    reminders.
+    """
+
+    def _make_args(self, name, oneshot=False):
+        args = MagicMock()
+        args.name = name
+        args.oneshot = oneshot
+        return args
+
+    def test_remove_by_index_first(self):
+        """kim remove 1 removes the first recurring reminder."""
+        config = {
+            "reminders": [
+                {"name": "water", "interval": "30m"},
+                {"name": "stretch", "interval": "1h"},
+            ]
+        }
+        with patch("kim.commands.management.load_config", return_value=config), patch(
+            "kim.commands.management._save_config"
+        ) as mock_save, patch("kim.commands.management._signal_reload"), patch(
+            "builtins.print"
+        ):
+            from kim.commands.management import cmd_remove
+
+            cmd_remove(self._make_args("1"))
+
+        saved = mock_save.call_args[0][0]
+        names = [r["name"] for r in saved["reminders"]]
+        self.assertEqual(names, ["stretch"])
+
+    def test_remove_by_index_second(self):
+        """kim remove 2 removes the second recurring reminder."""
+        config = {
+            "reminders": [
+                {"name": "water", "interval": "30m"},
+                {"name": "stretch", "interval": "1h"},
+                {"name": "standup", "at": "10:00"},
+            ]
+        }
+        with patch("kim.commands.management.load_config", return_value=config), patch(
+            "kim.commands.management._save_config"
+        ) as mock_save, patch("kim.commands.management._signal_reload"), patch(
+            "builtins.print"
+        ):
+            from kim.commands.management import cmd_remove
+
+            cmd_remove(self._make_args("2"))
+
+        saved = mock_save.call_args[0][0]
+        names = [r["name"] for r in saved["reminders"]]
+        self.assertEqual(names, ["water", "standup"])
+
+    def test_remove_by_index_out_of_range(self):
+        """kim remove 99 exits with error when index exceeds reminder count."""
+        config = {"reminders": [{"name": "water", "interval": "30m"}]}
+        with patch("kim.commands.management.load_config", return_value=config), patch(
+            "builtins.print"
+        ):
+            from kim.commands.management import cmd_remove
+
+            with self.assertRaises(SystemExit) as ctx:
+                cmd_remove(self._make_args("99"))
+            self.assertEqual(ctx.exception.code, 1)
+
+    def test_remove_by_name_still_works(self):
+        """kim remove water still works after index support added."""
+        config = {
+            "reminders": [
+                {"name": "water", "interval": "30m"},
+                {"name": "stretch", "interval": "1h"},
+            ]
+        }
+        with patch("kim.commands.management.load_config", return_value=config), patch(
+            "kim.commands.management._save_config"
+        ) as mock_save, patch("kim.commands.management._signal_reload"), patch(
+            "builtins.print"
+        ):
+            from kim.commands.management import cmd_remove
+
+            cmd_remove(self._make_args("water"))
+
+        saved = mock_save.call_args[0][0]
+        names = [r["name"] for r in saved["reminders"]]
+        self.assertEqual(names, ["stretch"])
+
+    def test_list_shows_index_column(self):
+        """kim list output must include a # index column."""
+        import inspect
+        from kim.commands import config as config_mod
+
+        src = inspect.getsource(config_mod.cmd_list)
+        self.assertIn("'#'", src)
+
+
 if __name__ == "__main__":
     unittest.main()
