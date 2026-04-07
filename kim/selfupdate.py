@@ -41,26 +41,69 @@ from .utils import CHECK
 # ---------------------------------------------------------------------------
 
 
+def _pip_owns_entry_point():
+    """Return True only if pip's RECORD lists the current 'kim' binary on PATH.
+
+    If importlib.metadata finds the package but the binary on PATH is NOT in
+    pip's RECORD (e.g. orphaned metadata from a previous pip install while the
+    active binary was placed by the install script), we should NOT treat this
+    as a pip install — doing so causes pip uninstall to say "no files found"
+    and leave the binary behind.
+    """
+    try:
+        import importlib.metadata
+
+        dist = importlib.metadata.distribution("kim-reminder")
+        kim_bin = shutil.which("kim")
+        if kim_bin is None:
+            # Metadata exists but no binary — let pip clean up the metadata.
+            return True
+        kim_real = str(Path(kim_bin).resolve())
+        # Walk RECORD entries; each is a path relative to the dist root.
+        try:
+            record = dist.read_text("RECORD") or ""
+        except Exception:
+            record = ""
+        if record:
+            # RECORD lines: path,hash,size — path may be relative or absolute
+            dist_loc = str(Path(dist.locate_file("")).resolve())
+            for line in record.splitlines():
+                entry_path = line.split(",")[0].strip()
+                if not entry_path:
+                    continue
+                resolved = str((Path(dist_loc) / entry_path).resolve())
+                if resolved == kim_real:
+                    return True
+            # Binary not found in RECORD — pip doesn't own this entry point.
+            return False
+        # No RECORD (editable / legacy install) — trust metadata.
+        return True
+    except Exception:
+        return False
+
+
 def _detect_install_type():
     """
     Returns one of: "pip", "script", "binary", "unknown"
 
-    "pip"    — installed as a Python package (importlib.metadata finds it)
-    "script" — ~/.kim/kim.py exists and the kim wrapper calls it
+    "pip"    — installed as a Python package (importlib.metadata finds it AND
+               pip's RECORD lists the kim binary on PATH)
+    "script" — ~/.kim/kim.py exists and the kim wrapper calls it, OR pip
+               metadata exists but the binary is not pip-owned (install-script
+               placed the binary after a prior pip install left orphaned metadata)
     "binary" — kim on PATH is a compiled standalone exe / ELF binary
     "unknown"— cannot determine; fall back to pip-upgrade attempt
 
-    Priority: pip > binary > script.
-    The pip check must win even if ~/.kim/kim.py also exists (a leftover from a
-    previous script install does not mean the active install is a script).
+    Priority: pip (only if it owns the entry point) > binary > script.
     """
-    # 1. pip / editable install — authoritative: if the package metadata exists,
-    #    pip owns this install regardless of what else is on disk.
+    # 1. pip / editable install — only if pip actually owns the binary.
     try:
         import importlib.metadata
 
         importlib.metadata.distribution("kim-reminder")
-        return "pip"
+        if _pip_owns_entry_point():
+            return "pip"
+        # Metadata exists but binary not pip-owned — fall through to binary/script checks.
     except Exception:
         pass
 
@@ -763,6 +806,10 @@ def _uninstall_pip(system):
             print(
                 "pip uninstall timed out.  Finish manually with:  pip uninstall --break-system-packages kim-reminder -y"
             )
+        # Also sweep known binary locations — pip may not have owned the entry
+        # point (e.g. install-script placed it after a prior pip install left
+        # orphaned metadata).
+        _remove_binary_candidates(system)
         _remove_kimdir(system)
         return
 
@@ -794,51 +841,27 @@ def _uninstall_pip(system):
     )
 
 
-def _uninstall_script_or_binary(system):
-    """Remove a script or standalone-binary install of kim.
+def _remove_binary_candidates(system):
+    """Delete the kim binary/wrapper from well-known install locations.
 
-    Handles direct file deletion with Windows deferred-deletion where needed.
+    Used by both the pip and script/binary uninstall paths so that any
+    binary placed by the install script is always cleaned up regardless of
+    which uninstall path was taken.  Windows deferred deletion is handled
+    separately by _uninstall_script_or_binary; this function is a no-op on
+    Windows.
     """
-    binary_candidates = [Path.home() / ".local" / "bin" / "kim"]
+    if system == "Windows":
+        return
+    candidates = [Path.home() / ".local" / "bin" / "kim"]
     if system == "Darwin":
-        binary_candidates += [
+        candidates += [
             Path("/usr/local/bin/kim"),
             Path("/opt/homebrew/bin/kim"),
         ]
-    elif system == "Windows":
-        # On Windows all binaries are deferred — direct deletion of kim.bat
-        # while cmd.exe is still executing it causes "The batch file cannot be
-        # found." on exit, and kim.exe may still be the running process.
-        pass
-
-    deferred_bat = None
-    deferred_exe = None
     _which = shutil.which("kim")
     if _which:
-        which_path = Path(_which).resolve()
-        if system == "Windows" and which_path.suffix.lower() == ".bat":
-            deferred_bat = which_path
-        elif system == "Windows" and which_path.suffix.lower() == ".exe":
-            deferred_exe = which_path
-        else:
-            binary_candidates.append(which_path)
-
-    if system == "Windows":
-        if deferred_bat is None:
-            _fallback_bat = Path.home() / ".local" / "bin" / "kim.bat"
-            if _fallback_bat.exists():
-                deferred_bat = _fallback_bat
-        exe_candidates = [
-            Path(sys.executable).parent / "Scripts" / "kim.exe",
-            Path(sys.executable).parent.parent / "Scripts" / "kim.exe",
-            Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
-        ]
-        for _exe in exe_candidates:
-            if _exe.exists() and _exe != deferred_exe:
-                deferred_exe = _exe
-                break
-
-    for path in list(dict.fromkeys(binary_candidates)):
+        candidates.append(Path(_which).resolve())
+    for path in list(dict.fromkeys(candidates)):
         if path.exists():
             if path.is_dir():
                 try:
@@ -853,6 +876,66 @@ def _uninstall_script_or_binary(system):
                     print(f"Could not remove {path}: {e}")
                     continue
             print(f"Removed {path}")
+
+
+def _uninstall_script_or_binary(system):
+    """Remove a script or standalone-binary install of kim.
+
+    Handles direct file deletion with Windows deferred-deletion where needed.
+    """
+    if system != "Windows":
+        _remove_binary_candidates(system)
+        # Clean up any orphaned pip metadata left by a prior pip install.
+        try:
+            import importlib.metadata
+
+            importlib.metadata.distribution("kim-reminder")
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "uninstall",
+                    "--break-system-packages",
+                    "kim-reminder",
+                    "-y",
+                ],
+                timeout=120,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+        _remove_kimdir(system)
+        return
+
+    # Windows: all binaries are deferred — direct deletion of kim.bat
+    # while cmd.exe is still executing it causes "The batch file cannot be
+    # found." on exit, and kim.exe may still be the running process.
+
+    deferred_bat = None
+    deferred_exe = None
+    _which = shutil.which("kim")
+    if _which:
+        which_path = Path(_which).resolve()
+        if which_path.suffix.lower() == ".bat":
+            deferred_bat = which_path
+        elif which_path.suffix.lower() == ".exe":
+            deferred_exe = which_path
+
+    if deferred_bat is None:
+        _fallback_bat = Path.home() / ".local" / "bin" / "kim.bat"
+        if _fallback_bat.exists():
+            deferred_bat = _fallback_bat
+    exe_candidates = [
+        Path(sys.executable).parent / "Scripts" / "kim.exe",
+        Path(sys.executable).parent.parent / "Scripts" / "kim.exe",
+        Path.home() / "AppData" / "Local" / "Programs" / "kim" / "kim.exe",
+    ]
+    for _exe in exe_candidates:
+        if _exe.exists() and _exe != deferred_exe:
+            deferred_exe = _exe
+            break
 
     _remove_kimdir(system)
 

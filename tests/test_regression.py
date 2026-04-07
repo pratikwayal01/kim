@@ -251,13 +251,27 @@ class TestSelfUpdateInstallTypeDetection(unittest.TestCase):
     """_detect_install_type() must correctly classify the install."""
 
     def test_pip_install_detected(self):
-        """When importlib.metadata finds kim-reminder, type is 'pip'."""
+        """When pip metadata exists AND the binary on PATH is in RECORD, type is 'pip'."""
         from kim import selfupdate
         import importlib.metadata
 
-        fake_dist = MagicMock()
-        with patch.object(importlib.metadata, "distribution", return_value=fake_dist):
-            result = selfupdate._detect_install_type()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_bin = Path(tmpdir) / "kim"
+            fake_bin.write_text(
+                "#!/usr/bin/env python3\n# pip entry point", encoding="utf-8"
+            )
+
+            # RECORD lists this binary (path relative to dist root)
+            record_content = f"{fake_bin},sha256=abc,123\n"
+            fake_dist = MagicMock()
+            fake_dist.read_text.return_value = record_content
+            fake_dist.locate_file.return_value = Path(tmpdir)  # dist root = tmpdir
+
+            with patch.object(
+                importlib.metadata, "distribution", return_value=fake_dist
+            ):
+                with patch("shutil.which", return_value=str(fake_bin)):
+                    result = selfupdate._detect_install_type()
         self.assertEqual(result, "pip")
 
     def test_script_install_detected(self):
@@ -316,6 +330,98 @@ class TestSelfUpdateInstallTypeDetection(unittest.TestCase):
                     with patch("shutil.which", return_value=str(fake_bin)):
                         result = selfupdate._detect_install_type()
         self.assertEqual(result, "binary")
+
+
+# ---------------------------------------------------------------------------
+# selfupdate.py — install-script binary not removed on uninstall (v4.5.8)
+#
+# Bug: after running `pip install kim-reminder` once, then running the
+# install.sh script, `importlib.metadata` still finds the old pip metadata.
+# _detect_install_type() returned "pip" even though the active binary at
+# ~/.local/bin/kim was placed by the install script and is NOT listed in pip's
+# RECORD.  pip uninstall reported "no files found" and left the binary behind.
+#
+# Fix 1: _pip_owns_entry_point() verifies the binary on PATH is in pip's RECORD
+#         before _detect_install_type() commits to returning "pip".
+# Fix 2: _uninstall_pip() always calls _remove_binary_candidates() after pip
+#         so the script-placed binary is deleted even in the pip path.
+# Fix 3: _uninstall_script_or_binary() silently runs pip uninstall to clean up
+#         orphaned metadata when pip metadata exists alongside a script install.
+# ---------------------------------------------------------------------------
+class TestUninstallOrphanedPipMetadata(unittest.TestCase):
+    """kim uninstall must remove ~/.local/bin/kim even with orphaned pip metadata."""
+
+    def test_detect_install_type_not_pip_when_binary_not_in_record(self):
+        """_detect_install_type returns non-pip when RECORD doesn't list the binary."""
+        from kim import selfupdate
+        import importlib.metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_bin = Path(tmpdir) / "kim"
+            fake_bin.write_text(
+                '#!/usr/bin/env bash\nexec python3 -m kim "$@"\n', encoding="utf-8"
+            )
+
+            # RECORD does NOT list fake_bin — simulates orphaned pip metadata
+            record_content = "/some/other/file.py,sha256=abc,123\n"
+            fake_dist = MagicMock()
+            fake_dist.read_text.return_value = record_content
+            fake_dist.locate_file.return_value = Path(tmpdir)
+
+            with patch.object(
+                importlib.metadata, "distribution", return_value=fake_dist
+            ):
+                with patch("shutil.which", return_value=str(fake_bin)):
+                    with patch.object(selfupdate, "KIM_DIR", Path(tmpdir) / "nokimdir"):
+                        result = selfupdate._detect_install_type()
+
+        # Must NOT be "pip" — the binary is not pip-owned
+        self.assertNotEqual(result, "pip")
+
+    def test_uninstall_pip_also_removes_binary_candidates(self):
+        """_uninstall_pip must call _remove_binary_candidates on non-Windows."""
+        from kim import selfupdate
+        import inspect
+
+        src = inspect.getsource(selfupdate._uninstall_pip)
+        self.assertIn(
+            "_remove_binary_candidates",
+            src,
+            "_uninstall_pip must call _remove_binary_candidates to clean up script-placed binaries",
+        )
+
+    def test_remove_binary_candidates_deletes_local_bin_kim(self):
+        """_remove_binary_candidates deletes ~/.local/bin/kim if it exists."""
+        from kim import selfupdate
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_local_bin = Path(tmpdir) / ".local" / "bin"
+            fake_local_bin.mkdir(parents=True)
+            fake_kim = fake_local_bin / "kim"
+            fake_kim.write_text(
+                '#!/usr/bin/env bash\nexec python3 -m kim "$@"\n', encoding="utf-8"
+            )
+
+            with patch.object(Path, "home", return_value=Path(tmpdir)):
+                with patch("shutil.which", return_value=None):
+                    selfupdate._remove_binary_candidates("Linux")
+
+            self.assertFalse(
+                fake_kim.exists(),
+                "~/.local/bin/kim must be deleted by _remove_binary_candidates",
+            )
+
+    def test_uninstall_script_or_binary_cleans_orphaned_pip_metadata(self):
+        """_uninstall_script_or_binary runs silent pip uninstall to clean up orphaned metadata."""
+        from kim import selfupdate
+        import inspect
+
+        src = inspect.getsource(selfupdate._uninstall_script_or_binary)
+        self.assertIn(
+            "pip",
+            src,
+            "_uninstall_script_or_binary must attempt pip uninstall to clean orphaned metadata",
+        )
 
 
 class TestSelfUpdateEmptyVersion(unittest.TestCase):
@@ -1522,7 +1628,7 @@ class TestInstallTypeOrderPipFirst(unittest.TestCase):
     does not fool it into returning 'script' when pip-installed."""
 
     def test_pip_wins_even_when_kimpy_exists(self):
-        """When pip metadata exists AND ~/.kim/kim.py exists, return 'pip'."""
+        """When pip metadata exists AND pip owns the binary, return 'pip' despite leftover ~/.kim/kim.py."""
         from kim import selfupdate
         import importlib.metadata
 
@@ -1530,12 +1636,24 @@ class TestInstallTypeOrderPipFirst(unittest.TestCase):
             fake_kim_dir = Path(tmpdir)
             (fake_kim_dir / "kim.py").write_text("# leftover", encoding="utf-8")
 
+            # Create a fake binary that pip owns
+            fake_bin = Path(tmpdir) / "bin" / "kim"
+            fake_bin.parent.mkdir()
+            fake_bin.write_text(
+                "#!/usr/bin/env python3\n# pip entry point", encoding="utf-8"
+            )
+
+            record_content = f"{fake_bin},sha256=abc,123\n"
             fake_dist = MagicMock()
+            fake_dist.read_text.return_value = record_content
+            fake_dist.locate_file.return_value = Path(tmpdir)
+
             with patch.object(
                 importlib.metadata, "distribution", return_value=fake_dist
             ):
                 with patch.object(selfupdate, "KIM_DIR", fake_kim_dir):
-                    result = selfupdate._detect_install_type()
+                    with patch("shutil.which", return_value=str(fake_bin)):
+                        result = selfupdate._detect_install_type()
 
         self.assertEqual(result, "pip")
 
