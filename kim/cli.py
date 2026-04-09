@@ -102,6 +102,16 @@ from .commands.misc import (
 from .selfupdate import cmd_selfupdate, cmd_uninstall
 
 
+def cmd_ui(_args) -> None:
+    """Launch the graphical management UI (requires PySide6)."""
+    from .ui import require_pyside6
+
+    require_pyside6()
+    from .ui.app import run
+
+    run()
+
+
 def main():
     _ensure_path_windows()  # add Scripts dir to PATH on first run if missing
     _enable_windows_ansi()  # enable ANSI colour codes on Windows for all commands
@@ -139,6 +149,7 @@ def main():
   update      Update a reminder
   remind      Fire a one-shot reminder after a delay or at a time
   interactive Enter interactive mode  (alias: -i)
+  ui          Open graphical manager  (requires PySide6)
   self-update Check for and install updates
   uninstall   Uninstall kim completely
   export      Export reminders to file  (--oneshots also exports pending one-shots)
@@ -381,6 +392,8 @@ logs:     ~/.kim/kim.log""",
     comp_p = sub.add_parser("completion", help="Generate shell completions")
     comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
 
+    sub.add_parser("ui", help="Open graphical manager (requires PySide6)")
+
     # Case-insensitive command handling
     known_commands = {
         "start",
@@ -404,6 +417,7 @@ logs:     ~/.kim/kim.log""",
         "slack",
         "sound",
         "completion",
+        "ui",
         "_remind-fire",
     }
     new_argv = []
@@ -444,6 +458,7 @@ logs:     ~/.kim/kim.log""",
         "slack": cmd_slack,
         "sound": cmd_sound,
         "completion": cmd_completion,
+        "ui": cmd_ui,
     }
 
     if args.command in cmds:
