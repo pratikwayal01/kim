@@ -457,11 +457,20 @@ except Exception:
             fi
             ;;
         add)
-            COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
-            compopt -o nospace 2>/dev/null
+            if [[ $cword -eq 2 ]]; then
+                # positional: reminder name (free-form — suppress file fallback)
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
+            fi
             ;;
         remind)
-            COMPREPLY=( $(compgen -W "--title -t --urgency" -- "$cur") )
+            if [[ $cword -eq 2 ]]; then
+                # positional: message (free-form — suppress file fallback)
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "--title -t --urgency" -- "$cur") )
+            fi
             ;;
         sound)
             COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
@@ -555,6 +564,7 @@ _kim() {
                     ;;
                 add)
                     _arguments \
+                        "1:reminder name:()" \
                         "(-I --interval)"{-I,--interval}"[Interval (e.g., 30m, 1h, 1d)]:interval:" \
                         "(-t --title)"{-t,--title}"[Notification title]:title:" \
                         "(-m --message)"{-m,--message}"[Notification message]:message:" \
@@ -581,10 +591,10 @@ _kim() {
                     ;;
                 remind)
                     _arguments \
-                        "1:message:" \
+                        "1:message:()" \
                         "(-t --title)"{-t,--title}"[Notification title]:title:" \
                         "--urgency[Urgency level]:urgency:(low normal critical)" \
-                        "*:time expression:"
+                        "*:time expression:()"
                     ;;
                 sound)
                     _arguments \
@@ -675,7 +685,10 @@ complete -c kim -f -n "not __fish_seen_subcommand_from $__kim_subcommands" -a co
 complete -c kim -f -n "not __fish_seen_subcommand_from $__kim_subcommands" -a remind         -d "Fire a one-shot reminder after a delay"
 
 # Commands with no further arguments — suppress filename fallback
-complete -c kim -f -n "__fish_seen_subcommand_from start stop status list validate interactive uninstall"
+# All subcommands that do NOT take a positional file path are listed here.
+# 'import' is intentionally excluded (its first positional IS a file).
+# '--sound-file' and 'export --output' use explicit -F on their own rules.
+complete -c kim -f -n "__fish_seen_subcommand_from start stop status list validate interactive uninstall edit logs self-update sound slack export completion remind add remove enable disable update"
 
 # Reminder-name completions (remove/enable/disable: any position; update: only before flags)
 complete -c kim -f -n "__fish_seen_subcommand_from remove enable disable" \
