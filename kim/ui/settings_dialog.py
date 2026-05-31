@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -66,8 +67,8 @@ class SettingsDialog(QDialog):
         self._log_path = log_path
 
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(480)
-        self.setMinimumHeight(380)
+        self.setMinimumWidth(540)
+        self.setMinimumHeight(460)
         self._build_ui()
         self._populate()
 
@@ -77,6 +78,8 @@ class SettingsDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
+        root.setSpacing(12)
+        root.setContentsMargins(16, 16, 16, 12)
         tabs = QTabWidget()
         root.addWidget(tabs)
 
@@ -241,9 +244,9 @@ class SettingsDialog(QDialog):
         self._log_view = QPlainTextEdit()
         self._log_view.setReadOnly(True)
         self._log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        font = self._log_view.font()
-        font.setFamily("monospace")
-        self._log_view.setFont(font)
+        self._log_view.setFont(
+            QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        )
         layout.addWidget(self._log_view)
 
         refresh_btn = QPushButton("Refresh log")
@@ -265,10 +268,9 @@ class SettingsDialog(QDialog):
 
     def _restart_daemon(self) -> None:
         self._daemon_cmd("stop")
-        import time
+        from PySide6.QtCore import QTimer
 
-        time.sleep(1)
-        self._daemon_cmd("start")
+        QTimer.singleShot(1200, lambda: self._daemon_cmd("start"))
 
     def _refresh_log(self) -> None:
         try:

@@ -77,8 +77,9 @@ class OneShotDialog(QDialog):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.setWindowTitle("Add One-Shot Reminder")
-        self.setMinimumWidth(440)
+        self.setWindowTitle("Schedule One-Shot Reminder")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
 
         self.result_fire_time: Optional[float] = None
         self.result_message: str = ""
@@ -95,11 +96,14 @@ class OneShotDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setSpacing(12)
+        root.setSpacing(16)
+        root.setContentsMargins(20, 20, 20, 16)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
 
         # Message
         self._message_edit = QLineEdit()

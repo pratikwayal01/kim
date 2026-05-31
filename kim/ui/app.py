@@ -26,6 +26,7 @@ from kim.core import CONFIG, PID_FILE
 from .config_watcher import ConfigWatcher
 from .main_window import KimMainWindow
 from .tray import KimTrayIcon
+from .theme import KIM_STYLESHEET
 
 
 def run() -> None:
@@ -40,6 +41,7 @@ def run() -> None:
     app.setApplicationName("kim")
     app.setApplicationDisplayName("kim — keep in mind")
     app.setQuitOnLastWindowClosed(False)  # tray keeps us alive
+    app.setStyleSheet(KIM_STYLESHEET)
 
     # Warn if no system tray is available (e.g. some minimal Linux WMs)
     if not KimTrayIcon.isSystemTrayAvailable():
@@ -58,6 +60,19 @@ def run() -> None:
     # Main window — hidden by default
     window = KimMainWindow(watcher)
     window.setWindowFlag(Qt.WindowType.Window)
+
+    # Size the window relative to the primary screen (60 % × 65 %, capped)
+    screen = app.primaryScreen()
+    if screen is not None:
+        sg = screen.availableGeometry()
+        w = min(max(int(sg.width() * 0.60), 860), 1400)
+        h = min(max(int(sg.height() * 0.65), 520), 920)
+        window.resize(w, h)
+        # Centre on screen
+        window.move(
+            sg.left() + (sg.width() - w) // 2,
+            sg.top() + (sg.height() - h) // 2,
+        )
 
     # Closing the window hides it (tray stays alive)
     window.closeEvent = lambda event: (event.ignore(), window.hide())

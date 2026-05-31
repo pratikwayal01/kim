@@ -91,7 +91,8 @@ class ReminderDialog(QDialog):
         self.result_reminder: Optional[Dict] = None
 
         self.setWindowTitle("Edit Reminder" if self._editing else "Add Reminder")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(480)
+        self.setMinimumHeight(420)
         self._build_ui()
         if self._editing:
             self._populate(self._original)
@@ -103,11 +104,14 @@ class ReminderDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setSpacing(12)
+        root.setSpacing(16)
+        root.setContentsMargins(20, 20, 20, 16)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
 
         # Name
         self._name_edit = QLineEdit()
@@ -214,9 +218,7 @@ class ReminderDialog(QDialog):
             except (ValueError, AttributeError):
                 pass
             tz = r.get("timezone", "")
-            if tz and tz in _COMMON_ZONES:
-                self._tz_combo.setCurrentText(tz)
-            elif tz:
+            if tz:
                 self._tz_combo.setCurrentText(tz)
             else:
                 self._tz_combo.setCurrentIndex(0)

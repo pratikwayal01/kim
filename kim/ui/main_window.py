@@ -25,13 +25,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QStatusBar,
     QTableWidget,
     QTableWidgetItem,
@@ -87,9 +88,9 @@ def _format_fire_at(ts: float) -> str:
 
 
 _URGENCY_COLORS = {
-    "critical": QColor("#c62828"),
-    "normal": QColor("#212121"),
-    "low": QColor("#616161"),
+    "critical": QColor("#da1e28"),
+    "normal": QColor("#161616"),
+    "low": QColor("#6f6f6f"),
 }
 
 _CHECK = "✔"
@@ -97,8 +98,8 @@ _CROSS = "✘"
 
 
 def _urgency_item(urgency: str) -> QTableWidgetItem:
-    item = QTableWidgetItem(urgency)
-    item.setForeground(_URGENCY_COLORS.get(urgency, QColor("#212121")))
+    item = QTableWidgetItem(urgency.capitalize())
+    item.setForeground(_URGENCY_COLORS.get(urgency, QColor("#161616")))
     if urgency == "critical":
         f = QFont()
         f.setBold(True)
@@ -116,6 +117,13 @@ def _human_delay(seconds: float) -> str:
     return " ".join(parts) if parts else "now"
 
 
+def _set_row_height(table: "QTableWidget") -> None:
+    """Set a DPI-aware row height: 2× the font line-spacing + comfortable padding."""
+    fm = QFontMetrics(table.font())
+    row_h = max(fm.height() * 2, 34)
+    table.verticalHeader().setDefaultSectionSize(row_h)
+
+
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
@@ -131,8 +139,7 @@ class KimMainWindow(QMainWindow):
         self._reminders: List[Dict] = []
 
         self.setWindowTitle(f"kim — keep in mind  v{VERSION}")
-        self.setMinimumSize(780, 460)
-        self.resize(900, 560)
+        self.setMinimumSize(720, 460)
 
         self._build_central()
         self._build_toolbar()
@@ -192,7 +199,7 @@ class KimMainWindow(QMainWindow):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
 
-        self._rem_table.verticalHeader().setDefaultSectionSize(28)
+        _set_row_height(self._rem_table)
 
         layout.addWidget(self._rem_table)
         return w
@@ -231,7 +238,7 @@ class KimMainWindow(QMainWindow):
         hh.setDefaultAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
-        self._os_table.verticalHeader().setDefaultSectionSize(28)
+        _set_row_height(self._os_table)
 
         layout.addWidget(self._os_table)
         return w
@@ -240,30 +247,59 @@ class KimMainWindow(QMainWindow):
         tb = QToolBar("Actions")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        tb.setStyleSheet(
+            "QToolButton { min-width: 0; padding: 4px 12px; font-size: 13px; }"
+        )
         self.addToolBar(tb)
 
-        self._act_add = tb.addAction("＋ Add", self._add_reminder)
-        self._act_edit = tb.addAction("✎ Edit", self._edit_reminder)
-        self._act_remove = tb.addAction("✖ Remove", self._remove_reminder)
+        self._act_add = tb.addAction("Add", self._add_reminder)
+        self._act_add.setToolTip("Add a new recurring reminder (Ctrl+N)")
+        self._act_edit = tb.addAction("Edit", self._edit_reminder)
+        self._act_edit.setToolTip("Edit the selected reminder")
+        self._act_remove = tb.addAction("Remove", self._remove_reminder)
+        self._act_remove.setToolTip("Remove the selected reminder")
         tb.addSeparator()
-        self._act_enable = tb.addAction("✔ Enable", self._enable_reminder)
-        self._act_disable = tb.addAction("⊘ Disable", self._disable_reminder)
+        self._act_enable = tb.addAction("Enable", self._enable_reminder)
+        self._act_disable = tb.addAction("Disable", self._disable_reminder)
         tb.addSeparator()
-        self._act_oneshot = tb.addAction("⏰ One-shot", self._add_oneshot)
-        self._act_cancel_os = tb.addAction("✖ Cancel one-shot", self._cancel_oneshot)
+        self._act_oneshot = tb.addAction("One-shot…", self._add_oneshot)
+        self._act_oneshot.setToolTip("Schedule a one-time reminder")
+        self._act_cancel_os = tb.addAction("Cancel", self._cancel_oneshot)
+        self._act_cancel_os.setToolTip("Cancel the selected one-shot reminder")
         tb.addSeparator()
-        self._act_start_daemon = tb.addAction("▶ Start", self._start_daemon)
-        self._act_stop_daemon = tb.addAction("■ Stop", self._stop_daemon)
+        self._act_start_daemon = tb.addAction("Start Daemon", self._start_daemon)
+        self._act_stop_daemon = tb.addAction("Stop Daemon", self._stop_daemon)
         tb.addSeparator()
-        tb.addAction("⚙ Settings", self._open_settings)
-        tb.addAction("↺ Refresh", self._reload_config)
+        tb.addAction("Settings", self._open_settings)
+        tb.addAction("Refresh", self._reload_config)
 
         self._update_action_states()
 
     def _build_statusbar(self) -> None:
         self._statusbar = QStatusBar()
+        self._statusbar.setSizeGripEnabled(True)
         self.setStatusBar(self._statusbar)
-        self._statusbar.showMessage("Loading…")
+
+        self._status_daemon_lbl = QLabel()
+        self._status_daemon_lbl.setStyleSheet("font-size: 12px; padding: 0 4px;")
+
+        self._status_count_lbl = QLabel()
+        self._status_count_lbl.setStyleSheet(
+            "color: #525252; font-size: 12px; padding: 0 4px;"
+        )
+
+        self._status_ver_lbl = QLabel(f"kim v{VERSION}")
+        self._status_ver_lbl.setStyleSheet(
+            "color: #8d8d8d; font-size: 12px; padding: 0 8px;"
+        )
+
+        self._statusbar.addWidget(self._status_daemon_lbl)
+        self._statusbar.addWidget(self._status_count_lbl)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._statusbar.addWidget(spacer)
+        self._statusbar.addPermanentWidget(self._status_ver_lbl)
 
     # ------------------------------------------------------------------
     # Data loading
@@ -314,7 +350,7 @@ class KimMainWindow(QMainWindow):
             enabled = r.get("enabled", True)
             en_item = QTableWidgetItem(_CHECK if enabled else _CROSS)
             en_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            en_item.setForeground(QColor("#2e7d32") if enabled else QColor("#c62828"))
+            en_item.setForeground(QColor("#198038") if enabled else QColor("#da1e28"))
             self._rem_table.setItem(row, 3, en_item)
 
         if selected_name:
@@ -345,12 +381,20 @@ class KimMainWindow(QMainWindow):
     def _refresh_status(self, daemon_running: Optional[bool] = None) -> None:
         if daemon_running is None:
             daemon_running = PID_FILE.exists()
-        dot = "●" if daemon_running else "○"
-        state = "Running" if daemon_running else "Stopped"
+
+        if daemon_running:
+            self._status_daemon_lbl.setText("● Daemon running")
+            self._status_daemon_lbl.setStyleSheet(
+                "color: #198038; font-size: 12px; font-weight: 600; padding: 0 4px;"
+            )
+        else:
+            self._status_daemon_lbl.setText("○ Daemon stopped")
+            self._status_daemon_lbl.setStyleSheet(
+                "color: #da1e28; font-size: 12px; padding: 0 4px;"
+            )
+
         n = len(self._reminders)
-        self._statusbar.showMessage(
-            f"{dot} Daemon: {state}   ·   {n} reminder{'s' if n != 1 else ''}   ·   kim v{VERSION}"
-        )
+        self._status_count_lbl.setText(f"{n} reminder{'s' if n != 1 else ''}")
 
     # ------------------------------------------------------------------
     # Selection helpers — reminders tab
