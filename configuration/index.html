@@ -1324,8 +1324,20 @@
 <tr>
 <td><code>interval</code></td>
 <td>number/string</td>
-<td>Yes</td>
-<td>How often to fire. Accepts:<br>- Integer (minutes)<br>- String: <code>"30m"</code>, <code>"2h"</code>, <code>"1d"</code></td>
+<td>Yes*</td>
+<td>How often to fire. Accepts integer (minutes) or string: <code>"30m"</code>, <code>"2h"</code>, <code>"1d"</code>, <code>"90s"</code>. *Required unless <code>at</code> is set.</td>
+</tr>
+<tr>
+<td><code>at</code></td>
+<td>string</td>
+<td>Yes*</td>
+<td>Fire daily at a fixed time in <code>HH:MM</code> format, e.g. <code>"10:00"</code>. *Required unless <code>interval</code> is set.</td>
+</tr>
+<tr>
+<td><code>timezone</code></td>
+<td>string</td>
+<td>No</td>
+<td>IANA timezone for <code>at</code>, e.g. <code>"Asia/Kolkata"</code>. Defaults to local system timezone. Only used with <code>at</code>.</td>
 </tr>
 <tr>
 <td><code>title</code></td>
@@ -1371,7 +1383,9 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Note:</strong> The legacy field <code>interval_minutes</code> is still supported for backward compatibility.</p>
+<blockquote>
+<p>Either <code>interval</code> or <code>at</code> is required for each reminder — not both.</p>
+</blockquote>
 <h3 id="per-reminder-overrides">Per-Reminder Overrides<a class="headerlink" href="#per-reminder-overrides" title="Permanent link">&para;</a></h3>
 <p>Each reminder can override the global sound and Slack settings. This lets you route different reminders to different Slack channels or play different sounds.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
@@ -1522,10 +1536,11 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">[</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="p">{</span>
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;standup call&quot;</span><span class="p">,</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;⏰ Reminder&quot;</span><span class="p">,</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">&quot;fire_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1711632000.0</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">]</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Reminder&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">&quot;urgency&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;normal&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">&quot;fire_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1711632000.0</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="p">]</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1547,9 +1562,14 @@
 <td>Notification title</td>
 </tr>
 <tr>
+<td><code>urgency</code></td>
+<td>string</td>
+<td><code>low</code>, <code>normal</code>, or <code>critical</code></td>
+</tr>
+<tr>
 <td><code>fire_at</code></td>
 <td>number</td>
-<td>Unix timestamp when the reminder should fire</td>
+<td>Unix timestamp when the reminder fires</td>
 </tr>
 </tbody>
 </table>
