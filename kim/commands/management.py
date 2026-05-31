@@ -15,6 +15,7 @@ from ..core import (
     PID_FILE,
     RELOAD_FILE,
     load_config,
+    save_config,
     log,
     parse_at_time,
 )
@@ -25,23 +26,8 @@ _CREATE_NO_WINDOW = 0x08000000
 
 
 def _save_config(config: dict) -> None:
-    """
-    Atomically write config to disk.
-    Writes to a .tmp file first, then renames to avoid partial-write corruption.
-    Raises SystemExit(1) on failure.
-    """
-    try:
-        tmp = CONFIG.with_suffix(".tmp")
-        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        if platform.system() != "Windows":
-            try:
-                os.chmod(tmp, 0o600)
-            except OSError:
-                pass
-        tmp.replace(CONFIG)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
+    """Thin alias kept for internal use; delegates to core.save_config."""
+    save_config(config)
 
 
 def _signal_reload() -> None:

@@ -227,6 +227,9 @@ def notify(
 
 # ── Slack notification helpers ────────────────────────────────────────────────
 def _notify_slack_webhook(title: str, message: str, webhook_url: str) -> None:
+    if not webhook_url.lower().startswith("https://"):
+        log.error("Slack webhook URL must use HTTPS. Refusing to send.")
+        return
     try:
         payload = {
             "text": f"*{title}*\n{message}",

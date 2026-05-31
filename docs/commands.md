@@ -250,8 +250,18 @@ PySide6 is an **optional dependency** — the core daemon and CLI work with zero
 ### `kim self-update`
 
 ```bash
-kim self-update [-f]   # Skip confirmation prompt
+kim self-update [-f]   # -f / --force skips confirmation prompt
 ```
+
+Downloads the latest release from GitHub, verifies its SHA256 checksum, and atomically replaces the binary. Works with pip, script, and standalone binary installs.
+
+### `kim uninstall`
+
+```bash
+kim uninstall
+```
+
+Stops the daemon, removes OS autostart entries, cancels all pending one-shot reminders (including sleeping background processes), and removes the binary and `~/.kim/` data directory.
 
 ## Shell Completions
 
@@ -259,7 +269,7 @@ Generate shell completions:
 
 ```bash
 kim completion bash   # Bash
-kim completion zsh    # Zsh  
+kim completion zsh    # Zsh
 kim completion fish   # Fish
 ```
 

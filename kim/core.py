@@ -10,6 +10,7 @@ import os
 import platform
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -25,7 +26,7 @@ try:
 except OSError:
     pass
 
-VERSION = "4.5.7"
+VERSION = "4.5.9"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 try:
@@ -92,6 +93,27 @@ DEFAULT_CONFIG = {
         "channel": "#general",
     },
 }
+
+
+def save_config(config: dict) -> None:
+    """
+    Atomically write config to disk (write .tmp then rename to avoid partial-write
+    corruption).  Sets 0o600 permissions on Unix.  Raises SystemExit(1) on failure.
+    """
+    import sys as _sys
+
+    try:
+        tmp = CONFIG.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        if platform.system() != "Windows":
+            try:
+                os.chmod(tmp, 0o600)
+            except OSError:
+                pass
+        tmp.replace(CONFIG)
+    except OSError as e:
+        print(f"Error writing config file: {e}")
+        _sys.exit(1)
 
 
 def load_config() -> dict:
@@ -194,6 +216,10 @@ def parse_interval(value) -> float:
 
 # ── Timezone helpers ──────────────────────────────────────────────────────────
 
+# Serialises the TZ env-var mutation in strategy 3 so concurrent threads
+# (e.g. scheduler thread + config-reload thread) cannot race on os.environ["TZ"].
+_tz_env_lock = threading.Lock()
+
 
 def _get_utc_offset(tz_name: str) -> datetime.timezone:
     """
@@ -242,16 +268,19 @@ def _get_utc_offset(tz_name: str) -> datetime.timezone:
 
     # --- 3. Windows: TZ env var + time.timezone ----------------------------
     try:
-        old_tz = os.environ.get("TZ")
-        os.environ["TZ"] = tz_name
-        time.tzset()  # only on Unix, but try
-        offset = -time.timezone  # seconds east of UTC
+        with _tz_env_lock:
+            old_tz = os.environ.get("TZ")
+            try:
+                os.environ["TZ"] = tz_name
+                time.tzset()  # only on Unix, but try
+                offset = -time.timezone  # seconds east of UTC
+            finally:
+                if old_tz is None:
+                    os.environ.pop("TZ", None)
+                else:
+                    os.environ["TZ"] = old_tz
+                time.tzset()
         tz = datetime.timezone(datetime.timedelta(seconds=offset), name=tz_name)
-        if old_tz is None:
-            os.environ.pop("TZ", None)
-        else:
-            os.environ["TZ"] = old_tz
-        time.tzset()
         return tz
     except Exception:
         pass

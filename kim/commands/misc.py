@@ -19,6 +19,7 @@ from ..core import (
     ONESHOT_FILE,
     VERSION,
     load_config,
+    save_config,
     log,
     parse_datetime,
 )
@@ -28,19 +29,8 @@ from ..utils import CHECK, CROSS, EM_DASH, ALARM, PLAY, BELL
 
 
 def _save_config(config: dict) -> None:
-    """Atomically write config; raises SystemExit(1) on failure."""
-    try:
-        tmp = CONFIG.with_suffix(".tmp")
-        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        if platform.system() != "Windows":
-            try:
-                os.chmod(tmp, 0o600)
-            except OSError:
-                pass
-        tmp.replace(CONFIG)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
+    """Thin alias kept for internal use; delegates to core.save_config."""
+    save_config(config)
 
 
 def cmd_remind(args):
@@ -91,7 +81,8 @@ def cmd_remind(args):
     oneshots = []
     if ONESHOT_FILE.exists():
         try:
-            oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            data = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            oneshots = data if isinstance(data, list) else []
         except (json.JSONDecodeError, OSError):
             oneshots = []
     oneshots.append(oneshot)
@@ -211,6 +202,8 @@ def cmd_remind_fire(args):
     if ONESHOT_FILE.exists():
         try:
             oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            if not isinstance(oneshots, list):
+                oneshots = []
             # Remove entries whose fire_at is in the past (already fired)
             now = fire_at
             remaining = [o for o in oneshots if o.get("fire_at", 0) > now]
@@ -236,6 +229,8 @@ def load_oneshot_reminders():
         return []
     try:
         oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        if not isinstance(oneshots, list):
+            oneshots = []
         now = time.time()
         # Filter out oneshots that have already fired (past fire_at)
         valid = [o for o in oneshots if o.get("fire_at", 0) > now]
@@ -267,6 +262,8 @@ def remove_oneshot(fire_at):
         return
     try:
         oneshots = json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+        if not isinstance(oneshots, list):
+            oneshots = []
         remaining = [o for o in oneshots if o.get("fire_at") != fire_at]
         _tmp = ONESHOT_FILE.with_suffix(".tmp")
         _tmp.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
@@ -460,11 +457,20 @@ except Exception:
             fi
             ;;
         add)
-            COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
-            compopt -o nospace 2>/dev/null
+            if [[ $cword -eq 2 ]]; then
+                # positional: reminder name (free-form — suppress file fallback)
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "--interval --title --message --urgency --sound-file --slack-channel --slack-webhook -I -t -m -u" -- "$cur") )
+            fi
             ;;
         remind)
-            COMPREPLY=( $(compgen -W "--title -t --urgency" -- "$cur") )
+            if [[ $cword -eq 2 ]]; then
+                # positional: message (free-form — suppress file fallback)
+                COMPREPLY=()
+            else
+                COMPREPLY=( $(compgen -W "--title -t --urgency" -- "$cur") )
+            fi
             ;;
         sound)
             COMPREPLY=( $(compgen -W "--set --clear --test --enable --disable" -- "$cur") )
@@ -558,6 +564,7 @@ _kim() {
                     ;;
                 add)
                     _arguments \
+                        "1:reminder name:()" \
                         "(-I --interval)"{-I,--interval}"[Interval (e.g., 30m, 1h, 1d)]:interval:" \
                         "(-t --title)"{-t,--title}"[Notification title]:title:" \
                         "(-m --message)"{-m,--message}"[Notification message]:message:" \
@@ -584,10 +591,10 @@ _kim() {
                     ;;
                 remind)
                     _arguments \
-                        "1:message:" \
+                        "1:message:()" \
                         "(-t --title)"{-t,--title}"[Notification title]:title:" \
                         "--urgency[Urgency level]:urgency:(low normal critical)" \
-                        "*:time expression:"
+                        "*:time expression:()"
                     ;;
                 sound)
                     _arguments \
@@ -678,7 +685,10 @@ complete -c kim -f -n "not __fish_seen_subcommand_from $__kim_subcommands" -a co
 complete -c kim -f -n "not __fish_seen_subcommand_from $__kim_subcommands" -a remind         -d "Fire a one-shot reminder after a delay"
 
 # Commands with no further arguments — suppress filename fallback
-complete -c kim -f -n "__fish_seen_subcommand_from start stop status list validate interactive uninstall"
+# All subcommands that do NOT take a positional file path are listed here.
+# 'import' is intentionally excluded (its first positional IS a file).
+# '--sound-file' and 'export --output' use explicit -F on their own rules.
+complete -c kim -f -n "__fish_seen_subcommand_from start stop status list validate interactive uninstall edit logs self-update sound slack export completion remind add remove enable disable update"
 
 # Reminder-name completions (remove/enable/disable: any position; update: only before flags)
 complete -c kim -f -n "__fish_seen_subcommand_from remove enable disable" \
