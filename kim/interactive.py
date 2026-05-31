@@ -10,6 +10,7 @@ import shutil
 import subprocess as _sp
 import sys
 import time
+import types
 
 try:
     import tty
@@ -29,7 +30,7 @@ from .core import (
 )
 from .notifications import notify
 from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT, CIRCLE_OPEN, CIRCLE_FILLED
-from .commands.management import _signal_reload
+from .commands.management import _signal_reload, cmd_enable, cmd_disable, cmd_update
 from .commands.misc import load_oneshot_reminders, remove_oneshot
 
 
@@ -162,6 +163,9 @@ def cmd_interactive(args):
         "Add Reminder",
         "Add One-shot",
         "Edit Reminder",
+        "Enable Reminder",
+        "Disable Reminder",
+        "Update Reminder",
         "Toggle Reminder",
         "Remove Reminder",
         "Remove One-shot",
@@ -603,21 +607,199 @@ def cmd_interactive(args):
         print(f"\n{CHECK} Cancelled one-shot: '{target.get('message', '')}'")
         time.sleep(1)
 
+    def enable_reminder():
+        clear_screen()
+        reminders = config.get("reminders", [])
+        if not reminders:
+            print("No reminders found.")
+            print("\nPress Enter to continue...")
+            input()
+            return
+
+        print("\033[1;32m=== Enable Reminder ===\033[0m\n")
+        for i, r in enumerate(reminders):
+            status = (
+                f"{CHECK} enabled" if r.get("enabled", True) else f"{MIDDOT} disabled"
+            )
+            print(f"  {i + 1}. {r['name']} [{status}]")
+
+        try:
+            choice = int(input("\nEnter number: ").strip()) - 1
+            if choice < 0 or choice >= len(reminders):
+                return
+        except ValueError:
+            return
+
+        r = reminders[choice]
+        if r.get("enabled", True):
+            print(f"Reminder '{r['name']}' is already enabled.")
+            time.sleep(1)
+            return
+
+        args = types.SimpleNamespace(name=r["name"])
+        try:
+            cmd_enable(args)
+        except SystemExit:
+            pass
+        time.sleep(1)
+
+    def disable_reminder():
+        clear_screen()
+        reminders = config.get("reminders", [])
+        if not reminders:
+            print("No reminders found.")
+            print("\nPress Enter to continue...")
+            input()
+            return
+
+        print("\033[1;32m=== Disable Reminder ===\033[0m\n")
+        for i, r in enumerate(reminders):
+            status = (
+                f"{CHECK} enabled" if r.get("enabled", True) else f"{MIDDOT} disabled"
+            )
+            print(f"  {i + 1}. {r['name']} [{status}]")
+
+        try:
+            choice = int(input("\nEnter number: ").strip()) - 1
+            if choice < 0 or choice >= len(reminders):
+                return
+        except ValueError:
+            return
+
+        r = reminders[choice]
+        if not r.get("enabled", True):
+            print(f"Reminder '{r['name']}' is already disabled.")
+            time.sleep(1)
+            return
+
+        args = types.SimpleNamespace(name=r["name"])
+        try:
+            cmd_disable(args)
+        except SystemExit:
+            pass
+        time.sleep(1)
+
+    def update_reminder():
+        clear_screen()
+        reminders = config.get("reminders", [])
+        if not reminders:
+            print("No reminders to update.")
+            print("\nPress Enter to continue...")
+            input()
+            return
+
+        print("\033[1;32m=== Update Reminder ===\033[0m\n")
+        for i, r in enumerate(reminders):
+            iv = r.get("interval") or f"at {r.get('at', '?')}"
+            status = CHECK if r.get("enabled", True) else MIDDOT
+            print(f"  {i + 1}. {r['name']} ({iv}) {status}")
+
+        try:
+            choice = int(input("\nEnter number: ").strip()) - 1
+            if choice < 0 or choice >= len(reminders):
+                return
+        except ValueError:
+            return
+
+        r = reminders[choice]
+        print(f"\nUpdating: \033[1m{r['name']}\033[0m")
+        print("(Press Enter to keep current value)\n")
+
+        # Schedule type
+        current_sched = (
+            f"interval: {r['interval']}"
+            if r.get("interval")
+            else f"at: {r.get('at', '?')}"
+        )
+        print(f"Schedule type  (current: {current_sched})")
+        print("  1. Keep current")
+        print("  2. Change to interval")
+        print("  3. Change to daily at time")
+        stype = input("Choice [1]: ").strip() or "1"
+
+        new_interval = None
+        new_at_time = None
+        new_timezone = None
+
+        if stype == "2":
+            iv_input = input("New interval (e.g. 30m, 1h, 1d): ").strip()
+            if iv_input:
+                _iv = iv_input.lower()
+                if not any(_iv.endswith(u) for u in ("m", "h", "d", "s")):
+                    try:
+                        _iv = f"{int(_iv)}m"
+                    except ValueError:
+                        print("Invalid interval — keeping current.")
+                        _iv = None
+                new_interval = _iv
+        elif stype == "3":
+            at_input = input("New time (HH:MM): ").strip()
+            if at_input:
+                try:
+                    new_at_time = parse_at_time(at_input)
+                except ValueError as e:
+                    print(f"Invalid time: {e} — keeping current.")
+                    new_at_time = None
+            tz_input = input(f"Timezone [{r.get('timezone', 'local')}]: ").strip()
+            if tz_input:
+                new_timezone = tz_input
+
+        new_title = input(f"Title [{r.get('title', '')}]: ").strip() or None
+        new_message = input(f"Message [{r.get('message', '')}]: ").strip() or None
+
+        cur_urgency = r.get("urgency", "normal")
+        new_urgency = input(f"Urgency (low/normal/critical) [{cur_urgency}]: ").strip()
+        if new_urgency not in ("low", "normal", "critical"):
+            new_urgency = None
+
+        cur_enabled = r.get("enabled", True)
+        en_input = (
+            input(f"Enabled (y/n) [{'y' if cur_enabled else 'n'}]: ").strip().lower()
+        )
+        do_enable = en_input == "y" if en_input in ("y", "n") else None
+
+        args = types.SimpleNamespace(
+            name=r["name"],
+            interval=new_interval,
+            at_time=new_at_time,
+            timezone=new_timezone,
+            title=new_title,
+            message=new_message,
+            urgency=new_urgency,
+            enable=do_enable is True,
+            disable=do_enable is False,
+            sound_file=None,
+            slack_channel=None,
+            slack_webhook=None,
+        )
+
+        try:
+            cmd_update(args)
+        except SystemExit:
+            pass
+        time.sleep(1)
+
     def start_kim():
         clear_screen()
-        if PID_FILE.exists():
-            print("kim is already running.")
-        else:
-            print("Starting kim... (run 'kim start' from another terminal)")
+        from .commands.daemon import cmd_start
+
+        args = types.SimpleNamespace(supervised=False, foreground=False)
+        try:
+            cmd_start(args)
+        except SystemExit:
+            pass
         print("\nPress Enter to continue...")
         input()
 
     def stop_kim():
         clear_screen()
-        if not PID_FILE.exists():
-            print("kim is not running.")
-        else:
-            print("Stopping kim... (run 'kim stop' from another terminal)")
+        from .commands.daemon import cmd_stop
+
+        args = types.SimpleNamespace()
+        try:
+            cmd_stop(args)
+        except SystemExit:
+            pass
         print("\nPress Enter to continue...")
         input()
 
@@ -627,11 +809,14 @@ def cmd_interactive(args):
         2: add_reminder,
         3: add_oneshot,
         4: edit_reminder,
-        5: toggle_reminder,
-        6: remove_reminder,
-        7: cancel_oneshot,
-        8: start_kim,
-        9: stop_kim,
+        5: enable_reminder,
+        6: disable_reminder,
+        7: update_reminder,
+        8: toggle_reminder,
+        9: remove_reminder,
+        10: cancel_oneshot,
+        11: start_kim,
+        12: stop_kim,
     }
 
     selected = 0
