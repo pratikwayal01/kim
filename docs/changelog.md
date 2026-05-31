@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.9] - 2026-05-31
+
+### Security
+- **Import data loss fixed** — `_sanitize_reminder` now preserves `at` and `timezone` fields. Daily-at reminders previously had their schedule silently stripped on `kim import`, leaving reminders with no schedule at all.
+- **Export file permissions** — `kim export --output FILE` now creates the output file with `0o600` permissions on Unix. Previously the file was world-readable, potentially exposing Slack tokens and webhook URLs on multi-user systems.
+- **Slack webhook HTTPS enforcement** — the webhook notifier now refuses to send if the URL does not start with `https://`, preventing accidental cleartext transmission of reminder content.
+- **Self-update SHA256 verification** — the CI build now generates a `.sha256` checksum for each binary asset. `kim self-update` downloads and verifies the checksum before replacing the binary, mitigating supply chain attacks via a compromised GitHub release.
+- **Magic bytes check tightened** — the script-update integrity check now matches `b"from "` and `b"import "` instead of the too-loose `b"fr"` / `b"im"`, which could accept arbitrary text files.
+
+### Fixed
+- **`kim remind` crash on corrupt `oneshots.json`** — `oneshots.json` is now validated as a `list` before `.append()`. A hand-edited or corrupt file containing a JSON object instead of an array caused an `AttributeError` crash. Fixed at all 4 read sites.
+- **`kim start` with only one-shots pending** — the daemon no longer refuses to start when all recurring reminders are disabled but one-shot reminders are pending.
+- **Uninstall now cancels pending one-shots** — `kim uninstall` kills sleeping one-shot fork children (Unix) and `_remind-fire` subprocesses (Windows), reports how many pending one-shots were cancelled, and wipes `oneshots.json` before removing files.
+
+### Stability
+- **Threading race condition in timezone resolution** — `_get_utc_offset` strategy-3 temporarily mutates `os.environ["TZ"]` and calls `time.tzset()`. This mutation is now wrapped in a `threading.Lock` with a `finally` block, preventing a race between the scheduler thread and a concurrent config-reload thread.
+- **`_kill_remind_fire_orphans` false positives fixed** — the Linux `/proc` scanner now resolves the exe path against the actual kim binary before sending `SIGTERM`. The old substring check (`"kim" in cmdline and "remind" in cmdline`) could match unrelated processes.
+
+### Code quality
+- **`save_config` centralised** — single canonical implementation in `core.py`; the three command modules (`management`, `config`, `misc`) that each maintained a verbatim copy now delegate to it.
+- **`cmd logs` memory usage** — uses `collections.deque(maxlen=n)` to stream the last N lines without loading the full 5 MB log file into memory.
+
 ## [4.5.8] - 2026-04-07
 
 ### Fixed

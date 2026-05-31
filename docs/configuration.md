@@ -52,7 +52,9 @@ Configuration is stored in `~/.kim/config.json`. The file is created on first ru
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Unique identifier |
-| `interval` | number/string | Yes | How often to fire. Accepts:<br>- Integer (minutes)<br>- String: `"30m"`, `"2h"`, `"1d"` |
+| `interval` | number/string | Yes* | How often to fire. Accepts integer (minutes) or string: `"30m"`, `"2h"`, `"1d"`, `"90s"`. *Required unless `at` is set. |
+| `at` | string | Yes* | Fire daily at a fixed time in `HH:MM` format, e.g. `"10:00"`. *Required unless `interval` is set. |
+| `timezone` | string | No | IANA timezone for `at`, e.g. `"Asia/Kolkata"`. Defaults to local system timezone. Only used with `at`. |
 | `title` | string | No | Notification heading (default: `Reminder: {name}`) |
 | `message` | string | No | Notification body (default: `Time for a reminder!`) |
 | `urgency` | string | No | `low`, `normal`, `critical` (default: `normal`) |
@@ -61,7 +63,7 @@ Configuration is stored in `~/.kim/config.json`. The file is created on first ru
 | `sound_file` | string | No | Per-reminder sound file (overrides global `sound_file`) |
 | `slack` | object | No | Per-reminder Slack config (overrides global `slack`) |
 
-**Note:** The legacy field `interval_minutes` is still supported for backward compatibility.
+> Either `interval` or `at` is required for each reminder — not both.
 
 ### Per-Reminder Overrides
 
@@ -223,7 +225,8 @@ One-shot reminders (created via `kim remind`) are stored separately in `~/.kim/o
 [
   {
     "message": "standup call",
-    "title": "⏰ Reminder",
+    "title": "Reminder",
+    "urgency": "normal",
     "fire_at": 1711632000.0
   }
 ]
@@ -233,7 +236,8 @@ One-shot reminders (created via `kim remind`) are stored separately in `~/.kim/o
 |---|---|---|
 | `message` | string | The reminder message |
 | `title` | string | Notification title |
-| `fire_at` | number | Unix timestamp when the reminder should fire |
+| `urgency` | string | `low`, `normal`, or `critical` |
+| `fire_at` | number | Unix timestamp when the reminder fires |
 
 ### Behavior
 

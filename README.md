@@ -1,9 +1,10 @@
-# kim — keep in mind 🧠
+# kim — keep in mind
 
 > Lightweight cross-platform reminder daemon for developers.  
 > No UI. Config-driven. Runs in the background.
 
-**Documentation:** [https://pratikwayal01.github.io/kim/](https://pratikwayal01.github.io/kim/)
+**Documentation:** [pratikwayal01.github.io/kim](https://pratikwayal01.github.io/kim/)  
+[![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
 
 ![kim demo](assets/demo.gif)
 
@@ -16,26 +17,24 @@
 curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/install.sh | bash
 ```
 
-**Windows** (PowerShell — installs, fixes PATH, sets up autostart)
+**Windows** (PowerShell)
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/pratikwayal01/kim/main/install.ps1 | iex"
 ```
 
-**pip** (all platforms — PATH must be configured manually on Windows, see below)
+**pip**
 ```bash
 pip install --break-system-packages kim-reminder
 ```
-[![PyPI](https://img.shields.io/pypi/v/kim-reminder)](https://pypi.org/project/kim-reminder/)
 
-> **Windows + pip:** After `pip install`, run this once to add `kim` to your PATH:
+That's it. kim starts automatically on login.
+
+> **Windows + pip:** If `kim` is not found after install, run this once to add it to your PATH:
 > ```powershell
 > $p = python -c "import sysconfig; print(sysconfig.get_path('scripts','nt_user'))"
 > [Environment]::SetEnvironmentVariable("PATH",$env:PATH+";"+$p,"User")
 > $env:PATH += ";$p"
 > ```
-> Then `kim --version` should work. Open a new terminal for the change to persist.
-
-That's it. kim starts automatically on login.
 
 ---
 
@@ -44,8 +43,9 @@ That's it. kim starts automatically on login.
 ```
 kim start          Start the daemon
 kim stop           Stop the daemon
-kim status         Show running reminders
-kim list           List all reminders from config  (shows index #)
+kim status         Show running reminders and config paths
+kim list           List all reminders  (shows index #)
+kim list -o        Also show pending one-shot reminders
 kim logs           Tail the log file
 kim edit           Open config in $EDITOR
 kim add            Add a new reminder
@@ -53,35 +53,28 @@ kim remove         Remove a reminder  (by name or index)
 kim enable         Enable a reminder
 kim disable        Disable a reminder
 kim update         Update a reminder
-kim remind         Fire a one-shot reminder after a delay or at a time
-kim interactive    Enter interactive mode (-i)
-kim self-update    Check for and install updates
-kim uninstall      Uninstall kim completely
-kim export         Export reminders to file
-kim import         Import reminders from file
+kim remind         One-shot reminder after a delay or at a time
+kim interactive    Arrow-key TUI  (-i shortcut)
+kim self-update    Update to latest release
+kim uninstall      Remove kim completely
+kim export         Export reminders to JSON or CSV
+kim import         Import reminders from JSON or CSV
 kim validate       Validate config file
-kim slack          Slack notification settings
-kim completion     Generate shell completions
-kim sound                          # show current config + format notes
-kim sound --set ~/sounds/bell.mp3  # set custom file (validates on set)
-kim sound --clear                  # revert to system default
-kim sound --test                   # play it immediately
-kim sound --enable / --disable     # toggle sound on/off
+kim slack          Show or test Slack configuration
+kim sound          Manage notification sound
+kim completion     Generate shell completions (bash/zsh/fish)
 ```
 
-### Interval reminders
+### Recurring reminders
 
 ```bash
-kim add "drink water" -I 30m          # every 30 minutes
-kim add "drink water" --every 30m     # same — --every is an alias for -I
-kim add "stretch" --every 1h
-```
+# Interval-based
+kim add eye-break -I 30m -t "Eye Break" -m "Look away" -u critical
+kim add water --every 1h
 
-### Daily at a fixed time
-
-```bash
-kim add standup --at 10:00                        # every day at 10:00 local time
-kim add standup --at 10:00 --tz Asia/Kolkata      # with explicit timezone
+# Daily at a fixed time
+kim add standup --at 10:00
+kim add standup --at 10:00 --tz Asia/Kolkata
 ```
 
 ### One-shot reminders
@@ -89,35 +82,29 @@ kim add standup --at 10:00 --tz Asia/Kolkata      # with explicit timezone
 ```bash
 # Relative
 kim remind "standup call" in 10m
-kim remind "take a break" in 1h
-kim remind "check the oven" in 25m
 kim remind "deploy window opens" in 2h 30m
 
-# Absolute — fire at a specific time
+# Absolute
 kim remind "standup" at 10:00
 kim remind "standup" at tomorrow 9am
 kim remind "call" at friday 2pm
 kim remind "deploy" at 2026-04-07 14:30 --tz America/New_York
 
-# Urgency (default: normal)
+# Urgency
 kim remind "wake up!" in 5m --urgency critical
 ```
 
-Fires once, runs in the background, frees your terminal immediately.
-
-**Persistent** — one-shot reminders survive daemon restarts and system reboots. Stored in `~/.kim/oneshots.json` and loaded automatically when the daemon starts. Expired reminders are cleaned up on next startup.
+Fires once, runs in the background, frees your terminal immediately. Survives daemon restarts and reboots — stored in `~/.kim/oneshots.json`.
 
 ### Removing reminders
 
-Both recurring and one-shot reminders can be removed by **name** or **index**:
-
 ```bash
-# Recurring — by name or index shown in `kim list`
+# Recurring — by name or index from `kim list`
 kim remove water
-kim remove 2          # remove 2nd reminder by index
+kim remove 2
 
-# One-shot — by index or message substring (from `kim list -o`)
-kim remove 1 -o       # cancel 1st pending one-shot
+# One-shot — by index or message substring from `kim list -o`
+kim remove 1 -o
 kim remove "standup" -o
 ```
 
@@ -131,83 +118,44 @@ kim remove "standup" -o
     {
       "name": "eye-break",
       "interval": "30m",
-      "title": "👁️ Eye Break",
-      "message": "Look 20 feet away for 20 seconds. Blink slowly.",
+      "title": "Eye Break",
+      "message": "Look 20 feet away for 20 seconds.",
       "urgency": "critical",
       "enabled": true
     },
     {
-      "name": "water",
-      "interval": "1h",
-      "title": "💧 Drink Water",
-      "message": "Stay hydrated.",
+      "name": "standup",
+      "at": "10:00",
+      "timezone": "Asia/Kolkata",
+      "title": "Standup",
+      "message": "Time for standup!",
       "urgency": "normal",
       "enabled": true
     }
   ],
-  "sound": true
-}
-```
-
-| Field | Values | Description |
-|---|---|---|
-| `name` | string | Unique identifier |
-| `interval` | number or string (`"30m"`, `"1h"`, `"1d"`) | How often to fire |
-| `title` | string | Notification heading |
-| `message` | string | Notification body |
-| `urgency` | `low` / `normal` / `critical` | Notification priority |
-| `enabled` | `true` / `false` | Toggle without deleting |
-| `sound` | `true` / `false` | (top-level) Play sound globally |
-| `slack` | object | (top-level) Slack settings |
-
-### Per-Reminder Overrides
-
-Each reminder can override global sound and Slack settings:
-
-```json
-{
-  "reminders": [
-    {
-      "name": "standup",
-      "interval": "30m",
-      "sound_file": "~/sounds/urgent.wav",
-      "slack": {
-        "enabled": true,
-        "webhook_url": "https://hooks.slack.com/services/...",
-        "channel": "#standup-alerts"
-      }
-    }
-  ],
   "sound": true,
   "slack": {
-    "enabled": true,
+    "enabled": false,
     "webhook_url": "https://hooks.slack.com/services/...",
     "channel": "#general"
   }
 }
 ```
 
-Or via CLI:
-```bash
-kim add standup -I 30m --sound-file ~/sounds/urgent.wav --slack-channel "#standup"
-```
+| Field | Values | Description |
+|---|---|---|
+| `name` | string | Unique identifier |
+| `interval` | `"30m"`, `"1h"`, `"1d"`, `"90s"` | Recurring interval (*required unless `at` is set*) |
+| `at` | `"HH:MM"` | Fire daily at a fixed time (*required unless `interval` is set*) |
+| `timezone` | IANA name e.g. `"Asia/Kolkata"` | Timezone for `at` (default: local) |
+| `title` | string | Notification heading |
+| `message` | string | Notification body |
+| `urgency` | `low` / `normal` / `critical` | Notification priority |
+| `enabled` | `true` / `false` | Toggle without deleting |
+| `sound_file` | path | Per-reminder sound file (overrides global) |
+| `slack` | object | Per-reminder Slack override |
 
-### Slack Integration
-
-```json
-{
-  "reminders": [...],
-  "sound": true,
-  "slack": {
-    "enabled": true,
-    "webhook_url": "https://hooks.slack.com/services/your-webhook-id",
-    "bot_token": "xoxb-your-bot-token",
-    "channel": "#general"
-  }
-}
-```
-
-Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
+Use `kim validate` to check your config. Use `kim edit` to open it in `$EDITOR`.
 
 ---
 
@@ -219,22 +167,11 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 | macOS | launchd agent | `osascript` |
 | Windows | Task Scheduler | PowerShell toast |
 
-- **Pure Python stdlib** — no pip installs
-- **Zero config** — works out of the box, creates default config on first run
-- All reminders run on a single `heapq` scheduler thread — memory stays flat (~0.02 MB) regardless of how many reminders you have
-- Logs at `~/.kim/kim.log`, PID at `~/.kim/kim.pid`
-
----
-
-## Why kim?
-
-| Tool | Pure stdlib | CLI-first | Zero config | One-shot | Recurring | Cross-platform | Slack | Config-driven | Interactive | Self-update | Export/Import |
-|------|-------------|-----------|-------------|----------|-----------|----------------|-------|---------------|-------------|-------------|---------------|
-| kim | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Remind | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
-| Cron | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ | ❌ | ❌ | ⚠️ |
-| macOS Reminders | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Google Calendar | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
+- **Pure Python stdlib** — zero runtime dependencies
+- **Single scheduler thread** — all reminders share one `heapq` event loop (~0.02 MB flat)
+- **Atomic writes** — all config and state files written via `.tmp` → rename
+- **Secrets never logged** — Slack tokens and webhook URLs are not written to `~/.kim/kim.log`
+- Logs at `~/.kim/kim.log` (5 MB rotating, 3 backups)
 
 ---
 
@@ -244,25 +181,11 @@ Use a **Webhook** or a **Bot Token** — not both. Test with `kim slack --test`.
 kim uninstall
 ```
 
-If `kim` is broken or the above doesn't work, use the standalone uninstaller:
+Cancels pending one-shot reminders, removes autostart entries, deletes `~/.kim/` and the binary.
 
+If kim is broken, use the standalone script:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/uninstall.sh | bash
-```
-
-**Last resort** — manually remove all kim files:
-
-```bash
-# Stop daemon
-[ -f ~/.kim/kim.pid ] && kill $(cat ~/.kim/kim.pid) 2>/dev/null; true
-# Remove binary, package, and data
-rm -f ~/.local/bin/kim
-rm -rf ~/.kim
-# Remove autostart (Linux)
-systemctl --user disable --now kim.service 2>/dev/null; true
-rm -f ~/.config/systemd/user/kim.service
-# Remove pip metadata if installed via pip
-pip uninstall kim-reminder -y 2>/dev/null; true
 ```
 
 ---
