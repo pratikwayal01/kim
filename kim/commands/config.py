@@ -9,29 +9,16 @@ import platform
 import subprocess
 import sys
 import time as _time
+from collections import deque
 from pathlib import Path
 
-from ..core import CONFIG, LOG_FILE, ONESHOT_FILE, load_config, log
+from ..core import CONFIG, LOG_FILE, ONESHOT_FILE, load_config, save_config, log
 from ..utils import CHECK, MIDDOT, HLINE
 
 
 def _save_config(config: dict) -> None:
-    """
-    Atomically write config to disk (write .tmp then rename).
-    Raises SystemExit(1) on failure.
-    """
-    try:
-        tmp = CONFIG.with_suffix(".tmp")
-        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        if platform.system() != "Windows":
-            try:
-                os.chmod(tmp, 0o600)
-            except OSError:
-                pass
-        tmp.replace(CONFIG)
-    except OSError as e:
-        print(f"Error writing config file: {e}")
-        sys.exit(1)
+    """Thin alias kept for internal use; delegates to core.save_config."""
+    save_config(config)
 
 
 def cmd_edit(args):
@@ -123,9 +110,12 @@ def cmd_logs(args):
         print("No log file yet.")
         return
     try:
-        lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
-        for line in lines[-n:]:
-            print(line)
+        with open(LOG_FILE, encoding="utf-8", errors="replace") as f:
+            tail = deque(f, maxlen=n)
+        for line in tail:
+            print(line, end="")
+        if tail and not tail[-1].endswith("\n"):
+            print()
     except OSError as e:
         print(f"Error reading log file: {e}")
 
@@ -221,7 +211,13 @@ def cmd_export(args):
 
     if args.output:
         try:
-            Path(args.output).write_text(output, encoding="utf-8")
+            out_path = Path(args.output)
+            out_path.write_text(output, encoding="utf-8")
+            if platform.system() != "Windows":
+                try:
+                    os.chmod(out_path, 0o600)
+                except OSError:
+                    pass
             msg = f"Exported to {args.output}"
             if include_oneshots:
                 msg += f" ({len(pending_oneshots)} one-shot(s) included)"
@@ -238,6 +234,8 @@ def _sanitize_reminder(r: dict) -> dict:
     ALLOWED_KEYS = {
         "name",
         "interval",
+        "at",
+        "timezone",
         "title",
         "message",
         "urgency",
@@ -253,6 +251,14 @@ def _sanitize_reminder(r: dict) -> dict:
                 safe[k] = r[k][:100].strip()
             elif k == "interval" and isinstance(r[k], (str, int, float)):
                 safe[k] = r[k]
+            elif k == "at" and isinstance(r[k], str):
+                # Validate HH:MM format before accepting
+                import re as _re
+
+                if _re.fullmatch(r"\d{1,2}:\d{2}", r[k].strip()):
+                    safe[k] = r[k].strip()
+            elif k == "timezone" and isinstance(r[k], str):
+                safe[k] = r[k][:100].strip()
             elif k in ("title", "message") and isinstance(r[k], str):
                 safe[k] = r[k][:500]
             elif k == "urgency" and r[k] in ("low", "normal", "critical"):

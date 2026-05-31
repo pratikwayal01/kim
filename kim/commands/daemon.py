@@ -175,7 +175,11 @@ def cmd_start(args):
     global_slack = config.get("slack", {})
     active = [r for r in config.get("reminders", []) if r.get("enabled", True)]
 
-    if not active:
+    # Load persisted one-shot reminders BEFORE the "nothing to do" check so
+    # that a user who only has pending one-shots can still start the daemon.
+    oneshots = load_oneshot_reminders()
+
+    if not active and not oneshots:
         print("No enabled reminders in config. Edit ~/.kim/config.json")
         sys.exit(1)
 
@@ -257,9 +261,6 @@ def cmd_start(args):
         # If this was a one-shot, remove from persistence
         if is_oneshot and fire_at is not None:
             remove_oneshot(fire_at)
-
-    # Load persisted one-shot reminders BEFORE creating scheduler
-    oneshots = load_oneshot_reminders()
 
     # ── Start heapq scheduler (replaces per-reminder threads) ─────────────────
     scheduler = KimScheduler(config, kim_notifier)

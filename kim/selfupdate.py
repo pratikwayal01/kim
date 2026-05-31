@@ -22,6 +22,7 @@ update accordingly:
 """
 
 import json
+import hashlib
 import logging
 import os
 import platform
@@ -240,6 +241,50 @@ def _atomic_replace(src: Path, dst: Path):
         ) from e
 
 
+def _verify_sha256(path: Path, checksum_url: str) -> bool:
+    """
+    Download the companion .sha256 file and verify path against it.
+    Returns True if the checksum matches, False if it doesn't.
+    Raises RuntimeError if the checksum file cannot be fetched.
+    If the release has no checksum file (404), logs a warning and returns True
+    (graceful degradation for releases before this feature was added).
+    """
+    req = urllib.request.Request(checksum_url, headers={"User-Agent": f"kim/{VERSION}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8", errors="replace").strip()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            log.warning(
+                "No .sha256 file found for this release asset — skipping checksum verification."
+            )
+            return True
+        raise RuntimeError(
+            f"HTTP {e.code} fetching checksum from {checksum_url}"
+        ) from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error fetching checksum: {e.reason}") from e
+
+    # Format: "<hex>  <filename>" or just "<hex>"
+    expected_hex = raw.split()[0].lower()
+    if len(expected_hex) != 64:
+        raise RuntimeError(
+            f"Unexpected checksum format in {checksum_url!r}: {raw[:80]!r}"
+        )
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    actual_hex = h.hexdigest().lower()
+
+    if actual_hex != expected_hex:
+        log.error("SHA256 mismatch: expected %s, got %s", expected_hex, actual_hex)
+        return False
+    log.debug("SHA256 verified: %s", actual_hex)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Per-install-type update implementations
 # ---------------------------------------------------------------------------
@@ -317,17 +362,29 @@ def _update_script(assets: list, latest_version: str):
         print(f"Download error: {e}")
         return
 
-    # Verify it looks like a Python script (starts with # or from)
+    # Verify it looks like a Python script (starts with # or from/import)
     if magic and not (
         magic.startswith(b"#")
-        or magic.startswith(b"fr")
-        or magic.startswith(b"im")
+        or magic.startswith(b"from ")
+        or magic.startswith(b"import ")
         or magic.startswith(b"\xef\xbb\xbf#")
     ):
         tmp.unlink(missing_ok=True)
         print(
             "Integrity check failed: downloaded file does not look like a Python script."
         )
+        return
+
+    # SHA256 verification
+    sha256_url = asset_url + ".sha256"
+    try:
+        if not _verify_sha256(tmp, sha256_url):
+            tmp.unlink(missing_ok=True)
+            print("Integrity check failed: SHA256 mismatch. Aborting update.")
+            return
+    except RuntimeError as e:
+        tmp.unlink(missing_ok=True)
+        print(f"Checksum verification error: {e}")
         return
 
     try:
@@ -452,6 +509,21 @@ def _update_binary(assets: list, latest_version: str):
                 f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
             )
             return
+
+    # SHA256 verification
+    sha256_url = asset_url + ".sha256"
+    try:
+        if not _verify_sha256(tmp_path, sha256_url):
+            tmp_path.unlink(missing_ok=True)
+            print("Integrity check failed: SHA256 mismatch. Aborting update.")
+            print(
+                f"  https://github.com/pratikwayal01/kim/releases/tag/v{latest_version}"
+            )
+            return
+    except RuntimeError as e:
+        tmp_path.unlink(missing_ok=True)
+        print(f"Checksum verification error: {e}")
+        return
 
     if platform.system() != "Windows":
         try:
@@ -618,8 +690,13 @@ def _kill_remind_fire_orphans(system):
             )
         elif system == "Linux":
             # Read /proc/<pid>/cmdline for each process and SIGTERM matching ones.
+            # Match only processes whose argv[0] or argv[1] resolves to the kim
+            # binary, to avoid accidentally killing unrelated processes whose
+            # cmdline happens to contain "kim" and "remind" as substrings.
             import signal as _sig
 
+            kim_bin = shutil.which("kim") or ""
+            kim_real = str(Path(kim_bin).resolve()) if kim_bin else ""
             my_pid = os.getpid()
             proc_dir = Path("/proc")
             for entry in proc_dir.iterdir():
@@ -629,19 +706,25 @@ def _kill_remind_fire_orphans(system):
                 if pid == my_pid:
                     continue
                 try:
-                    cmdline = (
-                        (entry / "cmdline")
-                        .read_bytes()
-                        .replace(b"\x00", b" ")
-                        .decode("utf-8", errors="replace")
+                    argv = (entry / "cmdline").read_bytes().split(b"\x00")
+                    # Decode each token; keep only non-empty
+                    argv_str = [a.decode("utf-8", errors="replace") for a in argv if a]
+                    if not argv_str:
+                        continue
+                    # Identify the executable: could be python3 with kim module,
+                    # or the kim binary directly.
+                    exe = str(Path(argv_str[0]).resolve()) if argv_str else ""
+                    cmdline = " ".join(argv_str)
+                    is_kim_process = (
+                        (kim_real and exe == kim_real)
+                        or (kim_real and kim_real in cmdline)
+                        or ("/kim" in exe)
+                        or ("kim/__main__" in cmdline)
+                        or ("-m kim" in cmdline)
                     )
-                    if (
-                        "kim" in cmdline
-                        and "remind" in cmdline
-                        and "_remind-fire" not in cmdline
-                    ):
-                        os.kill(pid, _sig.SIGTERM)
-                    elif "_remind-fire" in cmdline:
+                    if not is_kim_process:
+                        continue
+                    if "remind" in cmdline or "_remind-fire" in cmdline:
                         os.kill(pid, _sig.SIGTERM)
                 except (OSError, ProcessLookupError):
                     pass  # process already gone
@@ -1013,13 +1096,29 @@ def cmd_uninstall(args):
     # 1. Remove OS autostart service/task.
     _remove_os_service(system)
 
-    # 2. Kill orphaned one-shot fire subprocesses.
+    # 2. Kill orphaned one-shot fire subprocesses (sleeping fork children /
+    #    Windows _remind-fire processes) so they cannot fire after uninstall.
+    from .core import ONESHOT_FILE
+
+    _pending_count = 0
+    if ONESHOT_FILE.exists():
+        try:
+            import json as _json
+
+            raw = _json.loads(ONESHOT_FILE.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                import time as _t
+
+                _pending_count = sum(1 for o in raw if o.get("fire_at", 0) > _t.time())
+        except Exception:
+            pass
+
     _kill_remind_fire_orphans(system)
+    if _pending_count:
+        print(f"Cancelled {_pending_count} pending one-shot reminder(s).")
 
     # 3. Clear oneshots.json so any surviving fork children cannot re-schedule
     #    their reminders on a future kim start.
-    from .core import ONESHOT_FILE
-
     try:
         if ONESHOT_FILE.exists():
             ONESHOT_FILE.write_text("[]", encoding="utf-8")

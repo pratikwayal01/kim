@@ -46,7 +46,20 @@ jobs:
       - name: Build binary
         run: pyinstaller --onefile --name ${{ matrix.artifact }} kim.py
 
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist
+          if command -v sha256sum &>/dev/null; then
+            sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+          else
+            # macOS / Windows Git-bash fallback
+            shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+          fi
+
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ inputs.tag }} dist/${{ matrix.artifact }} --clobber
+        run: |
+          gh release upload ${{ inputs.tag }} dist/${{ matrix.artifact }} --clobber
+          gh release upload ${{ inputs.tag }} dist/${{ matrix.artifact }}.sha256 --clobber

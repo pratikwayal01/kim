@@ -102,14 +102,14 @@ class TestManagementAtomicWrite(unittest.TestCase):
         return args
 
     def test_save_config_is_atomic(self):
-        """The helper must use a .tmp intermediate, not open(CONFIG, 'w') directly."""
+        """The canonical save_config in core must use a .tmp intermediate."""
         import inspect
-        from kim.commands import management
+        from kim import core
 
-        src = inspect.getsource(management._save_config)
-        self.assertIn(".tmp", src, "_save_config must write to a .tmp file first")
+        src = inspect.getsource(core.save_config)
+        self.assertIn(".tmp", src, "save_config must write to a .tmp file first")
         self.assertIn(
-            ".replace(", src, "_save_config must atomically rename .tmp → CONFIG"
+            ".replace(", src, "save_config must atomically rename .tmp → CONFIG"
         )
 
     def test_cmd_add_uses_save_config(self):
