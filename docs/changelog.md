@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.10] - 2026-06-28
+
+### Security
+- **Path traversal in timezone resolution** — `_get_utc_offset` now validates `tz_name` before constructing a filesystem path. Previously a malicious `timezone` value in config or `--tz` CLI arg (e.g. `../../../etc/passwd`) could leak system file contents via the `/usr/share/zoneinfo` fallback reader. (core.py)
+
+### Fixed
+- **`kim remove` with numeric reminder names** — a reminder named `"1"` or `"2"` could never be removed by name; the code always treated numeric tokens as 1-based indices. Now name-matching by case-insensitive exact name is tried first, and index fallback is used only when no name matches.
+- **Shell completions showed files instead of subcommand flags** — fish, bash, and zsh completions for `kim add`, `kim remind`, and other subcommands with free-form positional arguments were falling through to filesystem completions when the user pressed Tab. Fixed by supressing file-completion fallback for all non-file subcommands.
+- **Interactive mode daemon start/stop** — the `Start kim` and `Stop kim` menu items in the interactive TUI just printed "run from another terminal" instead of actually invoking `cmd_start`/`cmd_stop`. Fixed to call the real daemon commands.
+- **Interactive mode missing operations** — added `Enable Reminder`, `Disable Reminder`, and `Update Reminder` (by index, with all updatable fields) to the interactive TUI menu.
+- **Scheduler memory leak** — cancelled events in the heapq scheduler that never bubbled to the top of the heap accumulated indefinitely. Added periodic full-heap rebuild when size exceeds 2× the live event count.
+
+### Changed
+- **`_save_config` centralised** — interactive.py's duplicate atomic-write function now delegates to `core.save_config`, eliminating the final copy of the same logic across the codebase.
+
 ## [4.5.9] - 2026-05-31
 
 ### Security
