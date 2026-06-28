@@ -27,6 +27,7 @@ from .core import (
     log,
     parse_datetime,
     parse_at_time,
+    save_config as _core_save_config,
 )
 from .notifications import notify
 from .utils import ARROW, HLINE, EM_DASH, CHECK, MIDDOT, CIRCLE_OPEN, CIRCLE_FILLED
@@ -38,19 +39,13 @@ def _save_config(config: dict) -> bool:
     """
     Atomically write config to disk (tmp → rename).
     Returns True on success, False on failure (after printing an error).
+    Unlike core.save_config, this does NOT raise SystemExit — it returns
+    False so the interactive loop can continue on I/O errors.
     """
     try:
-        tmp = CONFIG.with_suffix(".tmp")
-        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        if platform.system() != "Windows":
-            try:
-                os.chmod(tmp, 0o600)
-            except OSError:
-                pass
-        tmp.replace(CONFIG)
+        _core_save_config(config)
         return True
-    except OSError as e:
-        print(f"\nError writing config file: {e}")
+    except SystemExit:
         return False
 
 

@@ -328,6 +328,14 @@ class KimScheduler:
                     # Drain cancelled events from the top of the heap
                     while self._heap and self._heap[0].cancelled:
                         heapq.heappop(self._heap)
+                    # Periodic full cleanup: if the heap has 2x more entries
+                    # than live events, rebuild it to purge cancelled events
+                    # that never bubbled to the top.
+                    if len(self._heap) > len(self._live) * 2 + 64:
+                        self._heap = [
+                            e for e in self._heap if not e.cancelled
+                        ]
+                        heapq.heapify(self._heap)
                     next_fire = self._heap[0].fire_at if self._heap else None
                     # Check for one-shots while holding the lock so we read
                     # live cancelled flags, not a stale snapshot.

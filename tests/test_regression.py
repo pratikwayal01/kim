@@ -662,9 +662,9 @@ class TestInteractiveAtomicWrite(unittest.TestCase):
 
     def test_save_config_is_atomic(self):
         import inspect
-        from kim.interactive import _save_config
+        from kim.core import save_config
 
-        src = inspect.getsource(_save_config)
+        src = inspect.getsource(save_config)
         self.assertIn(".tmp", src)
         self.assertIn(".replace(", src)
 

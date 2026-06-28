@@ -110,7 +110,18 @@ def cmd_remove(args):
     name = args.name
     reminders = config.get("reminders", [])
 
-    # Index-based removal: if token is a positive integer treat it as 1-based index
+    # Name-match first (case-insensitive) — avoids treating numeric names as indices
+    for i, r in enumerate(reminders):
+        if r.get("name", "").lower() == name.lower():
+            removed = reminders.pop(i)
+            config["reminders"] = reminders
+            _save_config(config)
+            _signal_reload()
+            print(f"{CHECK} Removed reminder '{removed.get('name', '')}'")
+            log.info("Removed reminder: %s", removed.get("name", ""))
+            return
+
+    # Fall back to index-based removal only if name didn't match
     if name.isdigit():
         n = int(name)
         if 1 <= n <= len(reminders):

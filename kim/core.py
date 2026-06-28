@@ -232,6 +232,12 @@ def _get_utc_offset(tz_name: str) -> datetime.timezone:
       3. On Windows, try the 'time' module TZ env approach.
       4. If everything fails, raise ValueError with a helpful message.
     """
+    # Security: reject path-traversal chars in tz_name
+    if not tz_name or ".." in tz_name or "/" in tz_name or tz_name.startswith("."):
+        raise ValueError(
+            f"Invalid timezone name: {tz_name!r}. "
+            "Use an IANA name like 'Asia/Kolkata' or 'America/New_York'."
+        )
     # --- 1. zoneinfo (best path) -------------------------------------------
     try:
         import zoneinfo  # Python 3.9+
