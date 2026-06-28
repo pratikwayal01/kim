@@ -108,6 +108,15 @@ kim remove 1 -o
 kim remove "standup" -o
 ```
 
+### Graphical UI (optional)
+
+```bash
+pip install kim-reminder[ui]   # or: uv pip install -e ".[ui]"
+kim ui
+```
+
+A native-looking desktop window with system tray icon. Manage recurring reminders, view and cancel pending one-shots, start/stop the daemon — all without touching the terminal.
+
 ---
 
 ## Config — `~/.kim/config.json`
@@ -191,3 +200,4 @@ curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/uninstall.sh
 ---
 
 *Start small. Keep it in mind.*
+

@@ -215,6 +215,31 @@ kim interactive   # or kim -i
 
 A text-based UI for managing reminders. Use arrow keys to navigate, Enter to select.
 
+## Graphical UI (optional)
+
+```bash
+kim ui
+```
+
+Opens a native-looking desktop management window with a system tray icon.
+
+**Requires PySide6** — install with:
+```bash
+pip install kim-reminder[ui]
+# or
+pip install PySide6
+```
+
+**Features:**
+- **Reminders tab** — add, edit, remove, enable/disable recurring reminders
+- **One-shots tab** — view all pending one-shots with countdown; cancel any entry
+- **▶ Start / ■ Stop daemon** buttons in the toolbar
+- **⏰ One-shot** button — schedule a one-shot from a dialog (relative delay or absolute date+time with AM/PM)
+- System tray icon: green dot = daemon running, red = stopped; right-click for quick actions
+- Auto-refreshes every 3 seconds when config or daemon state changes
+
+PySide6 is an **optional dependency** — the core daemon and CLI work with zero dependencies without it.
+
 ## Self-Update & Uninstall
 
 | Command | Description |

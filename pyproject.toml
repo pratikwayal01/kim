@@ -32,6 +32,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["build", "twine", "pytest"]
+ui = ["PySide6>=6.5"]
 
 [project.scripts]
 kim = "kim.cli:main"
