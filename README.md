@@ -175,6 +175,18 @@ Use `kim validate` to check your config. Use `kim edit` to open it in `$EDITOR`.
 
 ---
 
+## hol-guard integration
+
+[hol-guard](https://github.com/hashgraph-online/hol-guard) ships a **kim command safety extension**. When the extension is enabled, hol-guard reviews mutating `kim` invocations before they run:
+
+- **Reminders:** `add`, `remove`, `update`, `enable`, `disable`, `remind`, `import`, `export` (with `-o`)
+- **Daemon & tooling:** `start`, `stop`, `edit`, `interactive` (`-i`), `self-update`, `uninstall`
+- **Notification settings:** `sound` (`--set` / `--clear` / `--test` / `--enable` / `--disable`), `slack --test`
+
+Read-only forms (`list`, `status`, `logs`, `validate`, `completion`, bare `sound` / `slack`, stdout `export`) stay automatic, so inspection never gets flagged.
+
+---
+
 ## Uninstall
 
 ```bash
