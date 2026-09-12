@@ -187,7 +187,16 @@ If kim is broken, use the standalone script:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pratikwayal01/kim/main/uninstall.sh | bash
 ```
+## Star History
 
+<a href="https://www.star-history.com/?repos=pratikwayal01%2Fkim&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=pratikwayal01/kim&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=pratikwayal01/kim&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=pratikwayal01/kim&type=date&legend=top-left" />
+ </picture>
+</a>
 ---
 
 *Start small. Keep it in mind.*
+
