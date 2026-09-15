@@ -8,6 +8,8 @@
 
 ![kim demo](assets/demo.gif)
 
+<video src="assets/brag.mp4" controls loop muted width="640"></video>
+
 ---
 
 ## Install
